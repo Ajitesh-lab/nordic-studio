@@ -191,6 +191,56 @@ function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+function renderMarkdown(raw) {
+  if (!raw) return '';
+  // Escape HTML first on non-code content
+  const PLACEHOLDER = '\x02';
+  const blocks = [];
+
+  // Pull out fenced code blocks before escaping
+  let text = raw.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    blocks.push(`<pre class="md-pre"><code class="${lang ? 'lang-'+lang : ''}">${escapeHtml(code.trim())}</code></pre>`);
+    return PLACEHOLDER + (blocks.length - 1) + PLACEHOLDER;
+  });
+
+  // Escape the rest
+  text = escapeHtml(text);
+
+  // Inline code
+  text = text.replace(/`([^`\n]+)`/g, '<code class="md-code">$1</code>');
+  // Bold + italic combo ***
+  text = text.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
+  // Bold
+  text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  // Italic
+  text = text.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+  // Headers (must come before list rules)
+  text = text.replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>');
+  text = text.replace(/^## (.+)$/gm,  '<h2 class="md-h2">$1</h2>');
+  text = text.replace(/^# (.+)$/gm,   '<h1 class="md-h1">$1</h1>');
+  // Horizontal rule
+  text = text.replace(/^(?:---+|___+|\*\*\*+)$/gm, '<hr class="md-hr">');
+  // Unordered list items
+  text = text.replace(/^[ \t]*[-*+] (.+)$/gm, '<li class="md-li">$1</li>');
+  // Ordered list items
+  text = text.replace(/^[ \t]*\d+\. (.+)$/gm, '<li class="md-oli">$1</li>');
+  // Wrap consecutive li runs in ul/ol
+  text = text.replace(/(<li class="md-li">[\s\S]*?<\/li>)(\n(?=<li class="md-li">)|$)/g, '$1\n');
+  text = text.replace(/((?:<li class="md-li">.*\n?)+)/g, '<ul class="md-ul">$1</ul>');
+  text = text.replace(/((?:<li class="md-oli">.*\n?)+)/g, '<ol class="md-ol">$1</ol>');
+  // Blockquote
+  text = text.replace(/^&gt; (.+)$/gm, '<blockquote class="md-bq">$1</blockquote>');
+  // Double newline → paragraph break
+  text = text.replace(/\n{2,}/g, '</p><p class="md-p">');
+  // Single newline → <br>
+  text = text.replace(/\n/g, '<br>');
+  text = '<p class="md-p">' + text + '</p>';
+
+  // Restore code blocks
+  text = text.replace(new RegExp(PLACEHOLDER + '(\\d+)' + PLACEHOLDER, 'g'), (_, i) => blocks[+i]);
+  return text;
+}
+
 function getGreeting() {
   const h = new Date().getHours();
   return h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening';
@@ -218,6 +268,18 @@ function ensureStyles() {
     .thinking-pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--md-sys-color-primary,#496250);animation:thinkPulse 1.4s ease-in-out infinite;flex-shrink:0}
     @keyframes thinkFade{0%{opacity:0;transform:translateY(4px)}100%{opacity:1;transform:translateY(0)}}
     .thinking-label{animation:thinkFade .35s ease-out}
+    .md-p{margin:0 0 .5em;line-height:1.65}
+    .md-p:last-child{margin-bottom:0}
+    .md-h1{font-size:1.15em;font-weight:700;margin:.9em 0 .3em}
+    .md-h2{font-size:1.05em;font-weight:700;margin:.8em 0 .3em}
+    .md-h3{font-size:.95em;font-weight:600;margin:.7em 0 .25em}
+    .md-hr{border:none;border-top:1px solid #e2e8f0;margin:.75em 0}
+    .md-bq{border-left:3px solid #cbd5e1;padding-left:.75em;color:#64748b;margin:.5em 0;font-style:italic}
+    .md-ul{list-style:disc;padding-left:1.25em;margin:.35em 0}
+    .md-ol{list-style:decimal;padding-left:1.25em;margin:.35em 0}
+    .md-li,.md-oli{margin:.15em 0}
+    .md-pre{background:#1e293b;color:#e2e8f0;border-radius:8px;padding:.75em 1em;font-size:.78em;overflow-x:auto;margin:.6em 0;font-family:ui-monospace,monospace;line-height:1.55}
+    .md-code{background:#f1f5f9;color:#475569;border-radius:4px;padding:.1em .35em;font-size:.82em;font-family:ui-monospace,monospace}
     @keyframes panelIn{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:translateX(0)}}
     #skill-panel{animation:panelIn .2s ease-out}
     @keyframes subNodeIn{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
@@ -650,7 +712,7 @@ function updateStreamingMessage() {
     <div class="relative pl-6">
       <div class="absolute left-0 top-0 bottom-0 w-[3px] bg-primary rounded-full"></div>
       ${state.streamText
-        ? `<div class="text-on-surface text-sm leading-relaxed whitespace-pre-wrap">${escapeHtml(state.streamText)}</div>`
+        ? `<div class="text-on-surface text-sm leading-relaxed md-body">${renderMarkdown(state.streamText)}</div>`
         : `<div class="flex items-center gap-2 py-1">
              <span class="thinking-pulse"></span>
              <span class="thinking-label text-xs font-medium text-primary/70 italic">${state.thinkingLabel || 'researching'}…</span>
@@ -708,7 +770,7 @@ function renderMessages() {
           </div>
           <div class="relative pl-6">
             <div class="absolute left-0 top-0 bottom-0 w-[3px] bg-primary/30 rounded-full"></div>
-            <div class="text-on-surface text-sm leading-relaxed whitespace-pre-wrap">${escapeHtml(msg.text)}</div>
+            <div class="text-on-surface text-sm leading-relaxed md-body">${renderMarkdown(msg.text)}</div>
           </div>
         </div>`;
       }
@@ -729,7 +791,7 @@ async function openHistory() {
       `<div class="text-xs text-slate-400 px-3 py-4 text-center flex items-center justify-center gap-2">
         <span class="material-symbols-outlined text-sm" style="animation:spin 1s linear infinite">refresh</span> Loading…
       </div>`;
-    try { const res = await gw.sessionsList(50); state.sessions = res?.sessions || (Array.isArray(res) ? res : []); }
+    try { const res = await gw.sessionsList(50); state.sessions = (res?.sessions || (Array.isArray(res) ? res : [])).filter(s => (s.key || s.sessionKey)); }
     catch (_) { state.sessions = []; }
     renderSidebarPanel();
   }
@@ -744,19 +806,27 @@ function renderSidebarPanel() {
   if (state.sidebarPanel === 'history') {
     const items = state.sessions.length
       ? state.sessions.map(s => {
-          // Build best title: prefer derivedTitle, fall back to first user message text
+          // Build title — never use the client name, prefer real conversation content
+          const CLIENT_NAMES = ['nordic studio', 'orchestra', 'openclaw'];
+          const isClientName = t => CLIENT_NAMES.includes((t || '').toLowerCase().trim());
+          // First user message is the best title — look in firstMessage/lastMessage
+          const firstUserText = extractText(
+            s.firstMessage?.role === 'user' ? (s.firstMessage?.content || s.firstMessage?.text) :
+            s.lastMessage?.role  === 'user' ? (s.lastMessage?.content  || s.lastMessage?.text)  : ''
+          );
           const candidates = [
-            s.derivedTitle, s.displayName, s.label,
-            // last/first message content
-            extractText(s.lastMessage?.content || s.lastMessage?.text || s.firstMessage?.content || s.firstMessage?.text || ''),
+            !isClientName(s.derivedTitle) ? s.derivedTitle : null,
+            !isClientName(s.label)        ? s.label        : null,
+            firstUserText,
+            extractText(s.lastMessage?.content || s.lastMessage?.text || ''),
           ].filter(Boolean);
           let rawTitle = candidates.find(c => {
             const cl = c.trim();
-            return cl.length > 2 && !cl.startsWith('{') && !cl.startsWith('[') && !cl.includes('```') && !cl.startsWith('Sender');
+            return cl.length > 3 && !cl.startsWith('{') && !cl.startsWith('[') && !cl.includes('```') && !cl.startsWith('Sender') && !isClientName(cl);
           }) || s.key || 'Untitled';
-          // Strip markdown code fences, leading punctuation/whitespace
+          // Strip markdown/JSON/leading punctuation
           rawTitle = rawTitle.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '').trim();
-          rawTitle = rawTitle.split('\n').map(l => l.trim()).find(l => l.length > 2 && !/^[{[\(]/.test(l) && !l.startsWith('Sender')) || rawTitle;
+          rawTitle = rawTitle.split('\n').map(l => l.trim()).find(l => l.length > 3 && !/^[{[\(]/.test(l) && !l.startsWith('Sender')) || rawTitle;
           rawTitle = rawTitle.replace(/^[^a-zA-Z0-9"'(\u00C0-\u024F]+/, '').replace(/\*\*/g, '').trim();
           const title = rawTitle.slice(0, 60) || 'Untitled';
           const key = s.key || s.sessionKey || s.id || '';

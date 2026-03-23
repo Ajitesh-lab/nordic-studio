@@ -142,7 +142,8 @@ export class Gateway {
     return this.send('sessions.list', {
       limit,
       includeDerivedTitles: true,
-      includeLastMessage: true
+      includeLastMessage: true,
+      includeFirstMessage: true,
     });
   }
 
