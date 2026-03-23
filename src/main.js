@@ -29,7 +29,7 @@ const state = window.__nordicState || {
   presenceLog: [],
   monitorOpen: false,
   // Thinking label
-  thinkingLabel: 'researching',
+  thinkingLabel: 'thinking',
   // Custom data sources
   customSources: JSON.parse(localStorage.getItem('nordic-custom-sources') || '[]'),
 };
