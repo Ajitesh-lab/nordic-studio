@@ -79,6 +79,29 @@ gw.on('browser', (payload) => {
   else if (url) setThinkingLabel('navigating');
 });
 
+// ── Response watchdog — fires if no final arrives within 75s ─────────────────
+let _responseTimer = null;
+function armResponseTimer() {
+  clearTimeout(_responseTimer);
+  _responseTimer = setTimeout(() => {
+    if (!state.streaming) return;
+    if (state.streamText) {
+      // We got partial text — commit it
+      finalizeMessage();
+    } else {
+      // No text at all — likely stuck on a browser tool with no relay
+      state.streaming = false;
+      resetThinkingLabel();
+      updateSendBtn();
+      document.getElementById('streaming-msg')?.remove();
+      appendMessage('assistant',
+        'No response received — OpenClaw may be waiting on a browser tool that isn\'t reachable. ' +
+        'Try asking again, or check that the OpenClaw browser relay is running if you need web navigation.');
+    }
+  }, 75000);
+}
+function clearResponseTimer() { clearTimeout(_responseTimer); _responseTimer = null; }
+
 gw.on('chat', (payload) => {
   if (!payload) return;
   const evtText = extractText(payload.message?.content || payload.message?.text || '');
@@ -93,9 +116,11 @@ gw.on('chat', (payload) => {
     updateStreamingMessage();
 
   } else if (payload.state === 'final') {
+    clearResponseTimer();
     state.streaming = false;
-    // Always commit whatever we have — prefer accumulated streamText, fall back to payload text
     if (evtText && evtText.length > (state.streamText?.length || 0)) state.streamText = evtText;
+    // Guard: if we still have no text, show a fallback so the message isn't silently lost
+    if (!state.streamText) state.streamText = '(No text response — Gemini may have completed via tool use only.)';
     finalizeMessage();
     resetThinkingLabel();
     if (state.pendingSkillRefresh) {
@@ -105,20 +130,22 @@ gw.on('chat', (payload) => {
     }
 
   } else if (payload.state === 'error') {
+    clearResponseTimer();
     state.streaming = false;
     resetThinkingLabel();
     updateSendBtn();
-    appendMessage('assistant', payload.error?.message || 'An error occurred');
+    const errMsg = payload.error?.message || payload.message?.text || 'An error occurred';
+    appendMessage('assistant', errMsg);
 
   } else if (payload.state === 'start') {
-    // Some gateway versions send a start event before deltas
     state.streaming = true;
     setThinkingLabel('thinking');
     updateStreamingMessage();
   }
 
-  // Catch-all: if we get a chat event with text that isn't delta/final/error, still show it
+  // Catch-all: any chat event with text we haven't handled
   if (!['delta','final','error','start'].includes(payload.state) && evtText) {
+    clearResponseTimer();
     state.streaming = false;
     if (!state.streamText) state.streamText = evtText;
     finalizeMessage();
@@ -675,25 +702,70 @@ async function loadHistory() {
   renderMessages();
 }
 
-async function sendMessage(text) {
-  if (!text.trim()) return;
-  if (!state.connected) { showToast('Not connected — retrying…'); gw.connect(); return; }
+function buildMessageWithContext(userText) {
+  const sources = state.customSources || [];
+  if (!sources.length) return userText;
 
-  // Build message with custom sources context if any are defined
-  let msgToSend = text;
-  if (state.customSources?.length) {
-    const srcCtx = state.customSources.map(s =>
-      `- ${s.label || new URL(s.url).hostname}: ${s.url}${s.description ? ' ('+s.description+')' : ''}`
-    ).join('\n');
-    msgToSend = `[Available data sources — use browser to navigate these when relevant:\n${srcCtx}]\n\n${text}`;
+  const lower = userText.toLowerCase();
+
+  // Score each source against the user query
+  const scored = sources.map(s => {
+    let score = 0;
+    const haystack = ((s.label || '') + ' ' + (s.description || '') + ' ' + (() => { try { return new URL(s.url).hostname; } catch { return ''; } })()).toLowerCase();
+    for (const word of haystack.split(/[\s,;/|]+/)) {
+      if (word.length > 3 && lower.includes(word)) score++;
+    }
+    // Also check if any word from the user query appears in the source metadata
+    for (const word of lower.split(/\s+/)) {
+      if (word.length > 3 && haystack.includes(word)) score++;
+    }
+    return { s, score };
+  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+
+  if (scored.length > 0) {
+    // Strong match — tell Gemini exactly where to go and ban alternatives
+    const urls = scored.map(x => {
+      const label = x.s.label || (() => { try { return new URL(x.s.url).hostname; } catch { return x.s.url; } })();
+      return `"${label}" → ${x.s.url}`;
+    }).join('\n');
+    return `[SYSTEM INSTRUCTION — follow exactly]
+The user has configured custom data sources for this topic. You MUST use the browser tool to navigate to the URL(s) below. Do NOT use claude.ai, anthropic.com, or web search — go directly to the provided URL and read the content there.
+
+URLs to navigate:
+${urls}
+
+User question: ${userText}`;
   }
 
-  appendMessage('user', text);  // display only user's text, not the injected context
+  // No keyword match — list all sources as background context
+  const list = sources.map(s => {
+    try { return `• ${s.label || new URL(s.url).hostname}: ${s.url}${s.description ? ' — ' + s.description : ''}`; }
+    catch { return null; }
+  }).filter(Boolean).join('\n');
+  return `[Custom data sources available — navigate to these with the browser tool when relevant, preferring them over claude.ai or search:\n${list}]\n\n${userText}`;
+}
+
+async function sendMessage(text) {
+  if (!text.trim()) return;
+  if (state.streaming) { showToast('Still processing…'); return; }  // prevent overlap
+  if (!state.connected) { showToast('Not connected — retrying…'); gw.connect(); return; }
+
+  const msgToSend = buildMessageWithContext(text);
+
+  appendMessage('user', text);
   state.streamText = ''; state.streaming = true;
   resetThinkingLabel();
   updateSendBtn(); updateStreamingMessage();
-  try { await gw.chatSend(msgToSend, state.sessionKey); }
-  catch (e) { resetThinkingLabel(); state.streaming = false; updateSendBtn(); appendMessage('assistant', 'Error: ' + (e.message || 'Failed')); }
+  try {
+    await gw.chatSend(msgToSend, state.sessionKey);
+    armResponseTimer(); // start 75s watchdog from when OpenClaw ACKed the send
+  } catch (e) {
+    clearResponseTimer();
+    resetThinkingLabel();
+    state.streaming = false;
+    updateSendBtn();
+    appendMessage('assistant', 'Error: ' + (e.message || 'Failed to send'));
+  }
 }
 
 function appendMessage(role, text) { state.messages.push({ role, text }); renderMessages(); }
@@ -1252,6 +1324,7 @@ function render() {
 // ── Global callbacks ──────────────────────────────────────────────────────────
 window.addEventListener('hashchange', () => { state.view = location.hash?.slice(1) || 'chat'; state.selectedSkillKey = null; render(); });
 window._newSession = () => {
+  clearResponseTimer();
   state.sessionKey = _freshSessionKey();
   state.messages = []; state.streamText = ''; state.streaming = false;
   state.sidebarPanel = null;
