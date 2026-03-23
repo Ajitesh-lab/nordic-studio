@@ -119,27 +119,31 @@ gw.on('chat', (payload) => {
     clearResponseTimer();
     state.streaming = false;
     if (evtText && evtText.length > (state.streamText?.length || 0)) state.streamText = evtText;
-    // Guard: if no text after tool use, nudge Gemini once — include the original question
+    // Guard: up to 2 nudge attempts before giving up — prevents loops while maximising text output
     if (!state.streamText) {
-      if (!state._nudged) {
-        state._nudged = true;
+      state._nudgeCount = (state._nudgeCount || 0) + 1;
+      if (state._nudgeCount <= 2) {
         state.streaming = true;
         setThinkingLabel('collating');
         updateStreamingMessage();
-        // Include the user's question so Gemini answers IT, not the nudge instruction
         const lastQ = state.messages.filter(m => m.role === 'user').slice(-1)[0]?.text || '';
-        const nudgeMsg = lastQ
-          ? `The user asked: "${lastQ}"\nPlease answer their question directly as plain text. Do NOT use any tools, browser, or URLs. Just answer from what you know.`
-          : 'Write your answer as plain text right now. Do NOT use any tools or browser.';
+        // Attempt 1: answer directly from knowledge, no tools
+        // Attempt 2: ultra-simple, just produce any text at all
+        const nudgeMsg = state._nudgeCount === 1
+          ? (lastQ
+              ? `The user asked: "${lastQ}" — please answer their question now as plain text. Do NOT use any tools or navigate anywhere. Just write what you know directly.`
+              : 'Write your answer as plain text right now — no tools, no browsing.')
+          : (lastQ
+              ? `Just write any answer to: "${lastQ}". Even a brief estimate or best-guess is fine. Plain text only, no tools.`
+              : 'Write any response as plain text. No tools.');
         gw.chatSend(nudgeMsg, state.sessionKey)
-          .catch(() => { state.streaming = false; state._nudged = false; updateSendBtn(); });
-        return; // wait for nudge response
+          .catch(() => { state.streaming = false; state._nudgeCount = 99; updateSendBtn(); });
+        return;
       }
-      // Already nudged and still no text — give up, keep _nudged true to block further loops
-      state.streamText = 'Gemini completed but returned no text. The tool may have failed silently — try rephrasing your question.';
+      // All attempts exhausted — show error, block further nudges for this turn
+      state.streamText = 'Gemini was unable to produce a text response. Try rephrasing, or add a data source URL for this topic.';
     } else {
-      // Got real text — safe to allow future nudges on next user message
-      state._nudged = false;
+      state._nudgeCount = 0; // reset on successful text
     }
     finalizeMessage();
     resetThinkingLabel();
@@ -724,16 +728,16 @@ async function loadHistory() {
 
 // Appended to EVERY outgoing user message
 const RESPONSE_MANDATE =
-  '\n\n[Rules: (1) For simple facts, math, translations, or general knowledge — answer DIRECTLY from your knowledge, do NOT use any tools. (2) Only use the browser tool when the question requires live data from a specific URL. (3) NEVER navigate to claude.ai, anthropic.com, or any AI chat service — they are not data sources. (4) After every tool use, ALWAYS write a complete text answer summarising what you found. Never respond with tool calls only.]';
+  '\n\n[Rules: (1) Simple facts, math, translations, general knowledge — answer DIRECTLY, no tools. (2) For live web data (prices, news, current events): try a web search tool first; if no search tool is available, navigate to https://claude.ai/new, type the question into the chat input, press Enter, wait for the response to appear, then READ and WRITE the full response as your answer. (3) ALWAYS write a complete text answer after any tool use — never respond with tool calls only. (4) If claude.ai navigation fails or times out, answer from your training knowledge as a fallback.]';
 
 // System primer injected into the FIRST message of every new session
 const SESSION_PRIMER =
-  '[System: You are a helpful assistant with browser access. For general knowledge, calculations, translations, and common facts, answer directly — do not use tools. Only use the browser tool when the user explicitly asks you to visit a URL or when live web data is required. After using any tool, always write your findings as text. Never navigate to claude.ai or anthropic.com.]\n\n';
+  '[System: You are a helpful assistant with browser and tool access. Rules: answer simple facts/math/translations directly without tools. For live data you cannot answer from memory, use the browser to navigate to a relevant URL and read the page content, then write a full text answer. If you visit claude.ai, interact with its chat input to get an answer. ALWAYS produce a written text response — never end silently after tool use.]\n\n';
 
 function buildMessageWithContext(userText) {
   const sources = state.customSources || [];
   const mandate = RESPONSE_MANDATE;
-  // First message in session gets a system primer so Gemini knows the rules
+  // First message in session gets a system primer so Gemini knows the rules from the start
   const primer = state.messages.length === 0 ? SESSION_PRIMER : '';
 
   if (!sources.length) return primer + userText + mandate;
@@ -745,7 +749,7 @@ function buildMessageWithContext(userText) {
     } catch { return null; }
   }).filter(Boolean).join('\n');
 
-  return `${primer}Note: I have set up the following personal data sources. When the question requires live data, use the browser tool to navigate to the most relevant URL below. Do not use claude.ai, anthropic.com, or any AI chat service:
+  return `${primer}Note: I have the following personal data sources set up. For questions about these topics, navigate directly to the relevant URL and read the content. For other live data, use web search or claude.ai as a fallback:
 
 ${list}
 
@@ -757,7 +761,7 @@ async function sendMessage(text) {
   if (state.streaming) { showToast('Still processing…'); return; }  // prevent overlap
   if (!state.connected) { showToast('Not connected — retrying…'); gw.connect(); return; }
 
-  state._nudged = false; // reset nudge guard for each new user message
+  state._nudgeCount = 0; // reset nudge counter for each new user message
   const msgToSend = buildMessageWithContext(text);
 
   appendMessage('user', text);
