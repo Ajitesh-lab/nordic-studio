@@ -119,7 +119,11 @@ gw.on('chat', (payload) => {
     clearResponseTimer();
     state.streaming = false;
     if (evtText && evtText.length > (state.streamText?.length || 0)) state.streamText = evtText;
-    // Guard: up to 2 nudge attempts before giving up — prevents loops while maximising text output
+
+    // Stale final from a previous nudge after we already finalized — ignore completely
+    if (state._turnDone) return;
+
+    // No text: nudge up to 2 times, then give up ONCE
     if (!state.streamText) {
       state._nudgeCount = (state._nudgeCount || 0) + 1;
       if (state._nudgeCount <= 2) {
@@ -127,24 +131,25 @@ gw.on('chat', (payload) => {
         setThinkingLabel('collating');
         updateStreamingMessage();
         const lastQ = state.messages.filter(m => m.role === 'user').slice(-1)[0]?.text || '';
-        // Attempt 1: answer directly from knowledge, no tools
-        // Attempt 2: ultra-simple, just produce any text at all
+        // Nudge 1: try claude.ai for the answer
+        // Nudge 2: just answer from training knowledge, anything is fine
         const nudgeMsg = state._nudgeCount === 1
           ? (lastQ
-              ? `The user asked: "${lastQ}" — please answer their question now as plain text. Do NOT use any tools or navigate anywhere. Just write what you know directly.`
-              : 'Write your answer as plain text right now — no tools, no browsing.')
+              ? `The user asked: "${lastQ}"\nPlease navigate to https://claude.ai/new and type that question in the chat input to get a live answer. Read the response and write it here. If claude.ai is unavailable, navigate to https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(lastQ)} and read the search results instead.`
+              : 'Navigate to https://claude.ai/new and ask the user\'s question there.')
           : (lastQ
-              ? `Just write any answer to: "${lastQ}". Even a brief estimate or best-guess is fine. Plain text only, no tools.`
+              ? `Just write any answer to: "${lastQ}". Use your training knowledge — even a brief, approximate answer is fine. Do NOT use any tools. Plain text only.`
               : 'Write any response as plain text. No tools.');
         gw.chatSend(nudgeMsg, state.sessionKey)
           .catch(() => { state.streaming = false; state._nudgeCount = 99; updateSendBtn(); });
         return;
       }
-      // All attempts exhausted — show error, block further nudges for this turn
+      // All 3 attempts (original + 2 nudges) exhausted — give up exactly once
       state.streamText = 'Gemini was unable to produce a text response. Try rephrasing, or add a data source URL for this topic.';
     } else {
-      state._nudgeCount = 0; // reset on successful text
+      state._nudgeCount = 0;
     }
+    state._turnDone = true; // block straggling finals from duplicating this message
     finalizeMessage();
     resetThinkingLabel();
     if (state.pendingSkillRefresh) {
@@ -762,6 +767,7 @@ async function sendMessage(text) {
   if (!state.connected) { showToast('Not connected — retrying…'); gw.connect(); return; }
 
   state._nudgeCount = 0; // reset nudge counter for each new user message
+  state._turnDone = false; // allow finals to be processed again
   const msgToSend = buildMessageWithContext(text);
 
   appendMessage('user', text);
