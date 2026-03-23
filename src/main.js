@@ -119,18 +119,20 @@ gw.on('chat', (payload) => {
     clearResponseTimer();
     state.streaming = false;
     if (evtText && evtText.length > (state.streamText?.length || 0)) state.streamText = evtText;
-    // Guard: if no text after tool use, nudge Gemini once — explicitly NO tools, NO browser
+    // Guard: if no text after tool use, nudge Gemini once — include the original question
     if (!state.streamText) {
       if (!state._nudged) {
         state._nudged = true;
         state.streaming = true;
         setThinkingLabel('collating');
         updateStreamingMessage();
-        // IMPORTANT: no RESPONSE_MANDATE here — that tells Gemini to use tools again (causes loop)
-        gw.chatSend(
-          'Write your answer as plain text right now. Do NOT use any tools, do NOT open any URLs or browser, do NOT navigate anywhere. Just write what you know directly as text.',
-          state.sessionKey
-        ).catch(() => { state.streaming = false; state._nudged = false; updateSendBtn(); });
+        // Include the user's question so Gemini answers IT, not the nudge instruction
+        const lastQ = state.messages.filter(m => m.role === 'user').slice(-1)[0]?.text || '';
+        const nudgeMsg = lastQ
+          ? `The user asked: "${lastQ}"\nPlease answer their question directly as plain text. Do NOT use any tools, browser, or URLs. Just answer from what you know.`
+          : 'Write your answer as plain text right now. Do NOT use any tools or browser.';
+        gw.chatSend(nudgeMsg, state.sessionKey)
+          .catch(() => { state.streaming = false; state._nudged = false; updateSendBtn(); });
         return; // wait for nudge response
       }
       // Already nudged and still no text — give up, keep _nudged true to block further loops
@@ -720,15 +722,21 @@ async function loadHistory() {
   renderMessages();
 }
 
-// Appended to EVERY outgoing user message — tells Gemini to always write text
+// Appended to EVERY outgoing user message
 const RESPONSE_MANDATE =
-  '\n\n(Important: always include a complete written answer in your response. Never respond with only tool calls — always write your findings as text. Do NOT navigate to claude.ai, anthropic.com, or any Anthropic service.)';
+  '\n\n[Rules: (1) For simple facts, math, translations, or general knowledge — answer DIRECTLY from your knowledge, do NOT use any tools. (2) Only use the browser tool when the question requires live data from a specific URL. (3) NEVER navigate to claude.ai, anthropic.com, or any AI chat service — they are not data sources. (4) After every tool use, ALWAYS write a complete text answer summarising what you found. Never respond with tool calls only.]';
+
+// System primer injected into the FIRST message of every new session
+const SESSION_PRIMER =
+  '[System: You are a helpful assistant with browser access. For general knowledge, calculations, translations, and common facts, answer directly — do not use tools. Only use the browser tool when the user explicitly asks you to visit a URL or when live web data is required. After using any tool, always write your findings as text. Never navigate to claude.ai or anthropic.com.]\n\n';
 
 function buildMessageWithContext(userText) {
   const sources = state.customSources || [];
   const mandate = RESPONSE_MANDATE;
+  // First message in session gets a system primer so Gemini knows the rules
+  const primer = state.messages.length === 0 ? SESSION_PRIMER : '';
 
-  if (!sources.length) return userText + mandate;
+  if (!sources.length) return primer + userText + mandate;
 
   const list = sources.map(s => {
     try {
@@ -737,7 +745,7 @@ function buildMessageWithContext(userText) {
     } catch { return null; }
   }).filter(Boolean).join('\n');
 
-  return `Note: I have set up the following personal data sources in my assistant. Please use the browser tool to navigate to the most relevant one to answer my question. Do not use claude.ai, anthropic.com, or any web search engine — go directly to these URLs instead:
+  return `${primer}Note: I have set up the following personal data sources. When the question requires live data, use the browser tool to navigate to the most relevant URL below. Do not use claude.ai, anthropic.com, or any AI chat service:
 
 ${list}
 
