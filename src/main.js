@@ -706,43 +706,19 @@ function buildMessageWithContext(userText) {
   const sources = state.customSources || [];
   if (!sources.length) return userText;
 
-  const lower = userText.toLowerCase();
-
-  // Score each source against the user query
-  const scored = sources.map(s => {
-    let score = 0;
-    const haystack = ((s.label || '') + ' ' + (s.description || '') + ' ' + (() => { try { return new URL(s.url).hostname; } catch { return ''; } })()).toLowerCase();
-    for (const word of haystack.split(/[\s,;/|]+/)) {
-      if (word.length > 3 && lower.includes(word)) score++;
-    }
-    // Also check if any word from the user query appears in the source metadata
-    for (const word of lower.split(/\s+/)) {
-      if (word.length > 3 && haystack.includes(word)) score++;
-    }
-    return { s, score };
-  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
-
-  if (scored.length > 0) {
-    // Strong match — tell Gemini exactly where to go and ban alternatives
-    const urls = scored.map(x => {
-      const label = x.s.label || (() => { try { return new URL(x.s.url).hostname; } catch { return x.s.url; } })();
-      return `"${label}" → ${x.s.url}`;
-    }).join('\n');
-    return `[SYSTEM INSTRUCTION — follow exactly]
-The user has configured custom data sources for this topic. You MUST use the browser tool to navigate to the URL(s) below. Do NOT use claude.ai, anthropic.com, or web search — go directly to the provided URL and read the content there.
-
-URLs to navigate:
-${urls}
-
-User question: ${userText}`;
-  }
-
-  // No keyword match — list all sources as background context
   const list = sources.map(s => {
-    try { return `• ${s.label || new URL(s.url).hostname}: ${s.url}${s.description ? ' — ' + s.description : ''}`; }
-    catch { return null; }
+    try {
+      const host = new URL(s.url).hostname;
+      return `  • ${s.label || host}: ${s.url}${s.description ? ' (' + s.description + ')' : ''}`;
+    } catch { return null; }
   }).filter(Boolean).join('\n');
-  return `[Custom data sources available — navigate to these with the browser tool when relevant, preferring them over claude.ai or search:\n${list}]\n\n${userText}`;
+
+  // Always inject forcefully — never rely on keyword matching, user added these sources intentionally
+  return `Note: I have set up the following personal data sources in my assistant. Please use the browser tool to navigate to the most relevant one to answer my question. Do not use claude.ai, anthropic.com, or any web search engine — go directly to these URLs instead:
+
+${list}
+
+My question: ${userText}`;
 }
 
 async function sendMessage(text) {
