@@ -728,11 +728,11 @@ async function loadHistory() {
 
 // Appended to EVERY outgoing user message
 const RESPONSE_MANDATE =
-  '\n\n[Rules: (1) Simple facts, math, translations, general knowledge — answer DIRECTLY, no tools. (2) For live web data (prices, news, current events): try a web search tool first; if no search tool is available, navigate to https://claude.ai/new, type the question into the chat input, press Enter, wait for the response to appear, then READ and WRITE the full response as your answer. (3) ALWAYS write a complete text answer after any tool use — never respond with tool calls only. (4) If claude.ai navigation fails or times out, answer from your training knowledge as a fallback.]';
+  '\n\n[Rules: (1) Simple facts, math, translations, general knowledge — answer DIRECTLY from your knowledge, no tools needed. (2) For live data you cannot answer from memory (prices, news, current events, real-time info): you MUST use the browser tool — do NOT just say "I cannot access real-time data." Step-by-step: navigate to https://claude.ai/new, wait for it to load, click or focus the chat input field, type the question exactly as the user asked, press Enter, wait for the full response to appear in the chat, then read the response text and write it as your answer. (3) ALWAYS end with a written text answer — never finish silently after tool use.]';
 
 // System primer injected into the FIRST message of every new session
 const SESSION_PRIMER =
-  '[System: You are a helpful assistant with browser and tool access. Rules: answer simple facts/math/translations directly without tools. For live data you cannot answer from memory, use the browser to navigate to a relevant URL and read the page content, then write a full text answer. If you visit claude.ai, interact with its chat input to get an answer. ALWAYS produce a written text response — never end silently after tool use.]\n\n';
+  '[System: You are a helpful assistant with browser access. For general knowledge, math, and facts, answer directly. For live data (prices, news, current events) that you cannot answer from training: DO NOT say "I cannot access real-time data" — instead, use the browser: go to https://claude.ai/new, type the question into the chat input, wait for the response, then copy that response as your answer. Always produce a full written text response.]\n\n';
 
 function buildMessageWithContext(userText) {
   const sources = state.customSources || [];
