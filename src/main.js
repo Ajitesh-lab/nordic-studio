@@ -119,8 +119,26 @@ gw.on('chat', (payload) => {
     clearResponseTimer();
     state.streaming = false;
     if (evtText && evtText.length > (state.streamText?.length || 0)) state.streamText = evtText;
-    // Guard: if we still have no text, show a fallback so the message isn't silently lost
-    if (!state.streamText) state.streamText = '(No text response — Gemini may have completed via tool use only.)';
+    // Guard: if no text after tool use, nudge Gemini once — explicitly NO tools, NO browser
+    if (!state.streamText) {
+      if (!state._nudged) {
+        state._nudged = true;
+        state.streaming = true;
+        setThinkingLabel('collating');
+        updateStreamingMessage();
+        // IMPORTANT: no RESPONSE_MANDATE here — that tells Gemini to use tools again (causes loop)
+        gw.chatSend(
+          'Write your answer as plain text right now. Do NOT use any tools, do NOT open any URLs or browser, do NOT navigate anywhere. Just write what you know directly as text.',
+          state.sessionKey
+        ).catch(() => { state.streaming = false; state._nudged = false; updateSendBtn(); });
+        return; // wait for nudge response
+      }
+      // Already nudged and still no text — give up, keep _nudged true to block further loops
+      state.streamText = 'Gemini completed but returned no text. The tool may have failed silently — try rephrasing your question.';
+    } else {
+      // Got real text — safe to allow future nudges on next user message
+      state._nudged = false;
+    }
     finalizeMessage();
     resetThinkingLabel();
     if (state.pendingSkillRefresh) {
@@ -702,9 +720,15 @@ async function loadHistory() {
   renderMessages();
 }
 
+// Appended to EVERY outgoing user message — tells Gemini to always write text
+const RESPONSE_MANDATE =
+  '\n\n(Important: always include a complete written answer in your response. Never respond with only tool calls — always write your findings as text. Do NOT navigate to claude.ai, anthropic.com, or any Anthropic service.)';
+
 function buildMessageWithContext(userText) {
   const sources = state.customSources || [];
-  if (!sources.length) return userText;
+  const mandate = RESPONSE_MANDATE;
+
+  if (!sources.length) return userText + mandate;
 
   const list = sources.map(s => {
     try {
@@ -713,12 +737,11 @@ function buildMessageWithContext(userText) {
     } catch { return null; }
   }).filter(Boolean).join('\n');
 
-  // Always inject forcefully — never rely on keyword matching, user added these sources intentionally
   return `Note: I have set up the following personal data sources in my assistant. Please use the browser tool to navigate to the most relevant one to answer my question. Do not use claude.ai, anthropic.com, or any web search engine — go directly to these URLs instead:
 
 ${list}
 
-My question: ${userText}`;
+My question: ${userText}${mandate}`;
 }
 
 async function sendMessage(text) {
@@ -726,6 +749,7 @@ async function sendMessage(text) {
   if (state.streaming) { showToast('Still processing…'); return; }  // prevent overlap
   if (!state.connected) { showToast('Not connected — retrying…'); gw.connect(); return; }
 
+  state._nudged = false; // reset nudge guard for each new user message
   const msgToSend = buildMessageWithContext(text);
 
   appendMessage('user', text);
