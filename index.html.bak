@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>Nordic Studio | OpenClaw</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface-dim":"#d8dadc","secondary-container":"#d0e1fb","on-primary-fixed":"#082012",
+            "on-primary-fixed-variant":"#344c3b","on-background":"#191c1e","on-surface":"#191c1e",
+            "outline-variant":"#c2c8c1","on-secondary":"#ffffff","surface-container-lowest":"#ffffff",
+            "secondary-fixed":"#d3e4fe","background":"#f7f9fb","tertiary-fixed-dim":"#b9c8de",
+            "surface-container-highest":"#e0e3e5","inverse-surface":"#2d3133",
+            "primary-container":"#617b68","error":"#ba1a1a","on-secondary-container":"#54647a",
+            "surface":"#f7f9fb","on-tertiary-container":"#fdfcff","tertiary":"#4f5d70",
+            "surface-bright":"#f7f9fb","primary":"#496250","on-primary":"#ffffff",
+            "on-primary-container":"#f6fff5","primary-fixed-dim":"#b2cdb7","outline":"#737972",
+            "surface-container":"#eceef0","tertiary-container":"#677689",
+            "on-tertiary-fixed":"#0d1c2d","tertiary-fixed":"#d4e4fa",
+            "on-secondary-fixed-variant":"#38485d","secondary":"#505f76",
+            "surface-tint":"#4b6452","inverse-on-surface":"#eff1f3",
+            "secondary-fixed-dim":"#b7c8e1","surface-container-low":"#f2f4f6",
+            "on-surface-variant":"#424843","on-error-container":"#93000a",
+            "on-secondary-fixed":"#0b1c30","inverse-primary":"#b2cdb7",
+            "on-tertiary":"#ffffff","primary-fixed":"#cee9d3","on-error":"#ffffff",
+            "surface-container-high":"#e6e8ea","on-tertiary-fixed-variant":"#39485a",
+            "error-container":"#ffdad6","surface-variant":"#e0e3e5"
+          },
+          fontFamily: { "headline":["Inter"], "body":["Inter"], "label":["Inter"], "mono":["JetBrains Mono","monospace"] },
+          borderRadius: { "DEFAULT":"0.125rem", "lg":"0.25rem", "xl":"0.5rem", "full":"0.75rem" }
+        }
+      }
+    }
+  </script>
+  <style>
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
+    .glass-panel { background: rgba(255,255,255,0.8); backdrop-filter: blur(20px); }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #e0e3e5; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #c2c8c1; }
+    .syntax-keyword { color: #496250; font-weight: 500; }
+    .syntax-string { color: #505f76; }
+    .syntax-comment { color: #94a3b8; font-style: italic; }
+    .syntax-function { color: #617b68; }
+    .mindmap-grid { background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px); background-size: 40px 40px; }
+    .msg-enter { animation: msgIn 0.3s ease-out; }
+    @keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-surface text-on-surface font-body overflow-hidden h-screen flex flex-col">
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
