@@ -48,28 +48,33 @@ async function relayPost(endpoint, body) {
 }
 
 /**
+ * Decide whether a question needs claude.ai (complex/creative/essay) or DDG (quick fact lookup).
+ */
+function needsClaudeAi(question) {
+  const q = question.toLowerCase();
+  // Complex tasks → claude.ai
+  if (q.length > 100) return true;
+  const complexWords = ['write', 'essay', 'explain', 'analyze', 'compare', 'describe', 'create',
+    'generate', 'summarize', 'outline', 'discuss', 'elaborate', 'opinion', 'argument',
+    'code', 'program', 'function', 'implement', 'design', 'plan', 'strategy', 'help me',
+    'how do i', 'how can i', 'what should', 'advise', 'recommend', 'review', 'critique'];
+  if (complexWords.some(w => q.includes(w))) return true;
+  // Quick lookups → DDG
+  const quickWords = ['price', 'weather', 'score', 'stock', 'time in', 'population',
+    'who is', 'when did', 'where is', 'capital of', 'how many', 'how tall', 'how old',
+    'definition', 'meaning of', 'convert', 'translate'];
+  if (quickWords.some(w => q.includes(w))) return false;
+  // Default: medium-length questions use claude.ai, short ones use DDG
+  return q.length > 40;
+}
+
+/**
  * Fetch an external answer for a user question via the browser relay.
- * Tries: 1) claude.ai (logged-in browser)  2) DuckDuckGo Lite  3) custom data sources
+ * Smart routing: complex → claude.ai, quick facts → DDG, custom sources always checked.
  * Returns { source, content } or null.
  */
 async function fetchExternalAnswer(question) {
-  // 1. Try claude.ai
-  try {
-    const data = await relayPost('/ask_claude', { question, timeout: 55000 });
-    if (data.ok && data.response && data.response.length > 80) {
-      return { source: 'claude.ai', content: data.response };
-    }
-  } catch (e) { console.warn('[relay] ask_claude failed:', e.message); }
-
-  // 2. Try DuckDuckGo Lite
-  try {
-    const data = await relayPost('/search_ddg', { query: question });
-    if (data.ok && data.content && data.content.length > 100) {
-      return { source: 'DuckDuckGo search', content: data.content };
-    }
-  } catch (e) { console.warn('[relay] search_ddg failed:', e.message); }
-
-  // 3. Try custom data sources if any are configured
+  // 0. Try custom data sources first if any are configured
   for (const src of (state.customSources || [])) {
     try {
       const data = await relayPost('/fetch_page', { url: src.url });
@@ -77,6 +82,40 @@ async function fetchExternalAnswer(question) {
         return { source: src.url, content: data.content.text };
       }
     } catch {}
+  }
+
+  const useClaudeFirst = needsClaudeAi(question);
+
+  if (useClaudeFirst) {
+    // Complex task → try claude.ai first, then DDG fallback
+    try {
+      const data = await relayPost('/ask_claude', { question, timeout: 55000 });
+      if (data.ok && data.response && data.response.length > 80) {
+        return { source: 'claude.ai', content: data.response };
+      }
+    } catch (e) { console.warn('[relay] ask_claude failed:', e.message); }
+
+    try {
+      const data = await relayPost('/search_ddg', { query: question });
+      if (data.ok && data.content && data.content.length > 100) {
+        return { source: 'DuckDuckGo search', content: data.content };
+      }
+    } catch (e) { console.warn('[relay] search_ddg failed:', e.message); }
+  } else {
+    // Quick lookup → try DDG first (faster), then claude.ai fallback
+    try {
+      const data = await relayPost('/search_ddg', { query: question });
+      if (data.ok && data.content && data.content.length > 100) {
+        return { source: 'DuckDuckGo search', content: data.content };
+      }
+    } catch (e) { console.warn('[relay] search_ddg failed:', e.message); }
+
+    try {
+      const data = await relayPost('/ask_claude', { question, timeout: 55000 });
+      if (data.ok && data.response && data.response.length > 80) {
+        return { source: 'claude.ai', content: data.response };
+      }
+    } catch (e) { console.warn('[relay] ask_claude failed:', e.message); }
   }
 
   return null;
