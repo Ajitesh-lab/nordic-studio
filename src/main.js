@@ -35,6 +35,53 @@ const state = window.__nordicState || {
 };
 window.__nordicState = state;
 
+// ── Browser Relay helpers (port 9999) ─────────────────────────────────────────
+const RELAY = 'http://127.0.0.1:9999';
+
+async function relayPost(endpoint, body) {
+  const res = await fetch(`${RELAY}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+/**
+ * Fetch an external answer for a user question via the browser relay.
+ * Tries: 1) claude.ai (logged-in browser)  2) DuckDuckGo Lite  3) custom data sources
+ * Returns { source, content } or null.
+ */
+async function fetchExternalAnswer(question) {
+  // 1. Try claude.ai
+  try {
+    const data = await relayPost('/ask_claude', { question, timeout: 55000 });
+    if (data.ok && data.response && data.response.length > 80) {
+      return { source: 'claude.ai', content: data.response };
+    }
+  } catch (e) { console.warn('[relay] ask_claude failed:', e.message); }
+
+  // 2. Try DuckDuckGo Lite
+  try {
+    const data = await relayPost('/search_ddg', { query: question });
+    if (data.ok && data.content && data.content.length > 100) {
+      return { source: 'DuckDuckGo search', content: data.content };
+    }
+  } catch (e) { console.warn('[relay] search_ddg failed:', e.message); }
+
+  // 3. Try custom data sources if any are configured
+  for (const src of (state.customSources || [])) {
+    try {
+      const data = await relayPost('/fetch_page', { url: src.url });
+      if (data.ok && data.content?.text && data.content.text.length > 100) {
+        return { source: src.url, content: data.content.text };
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
 // ── Gateway ───────────────────────────────────────────────────────────────────
 if (window.__nordicGw) window.__nordicGw.disconnect();
 const gw = new Gateway({ token: 'b7cefe215311bb01bcbbf85dcc2d753fbbb69371e2697467' });
@@ -120,36 +167,67 @@ gw.on('chat', (payload) => {
     state.streaming = false;
     if (evtText && evtText.length > (state.streamText?.length || 0)) state.streamText = evtText;
 
-    // Stale final from a previous nudge after we already finalized — ignore completely
+    // Stale final from a previous nudge after we already finalized — ignore
     if (state._turnDone) return;
 
-    // No text: nudge up to 2 times, then give up ONCE
+    // ── No text from Gemini: use browser relay to fetch answer externally ──
     if (!state.streamText) {
       state._nudgeCount = (state._nudgeCount || 0) + 1;
-      if (state._nudgeCount <= 2) {
+      const lastQ = state.messages.filter(m => m.role === 'user').slice(-1)[0]?.text || '';
+
+      // Attempt 1: Fetch from claude.ai (via our relay → user's logged-in Chrome)
+      // If that fails, fallback to DuckDuckGo Lite, then Gemini's own knowledge
+      if (state._nudgeCount === 1 && lastQ) {
+        state.streaming = true;
+        setThinkingLabel('researching');
+        updateStreamingMessage();
+        fetchExternalAnswer(lastQ).then(result => {
+          if (state._turnDone) return; // user sent new message while we were fetching
+          if (result) {
+            // Got external content — feed it to Gemini to format
+            state.streaming = true;
+            setThinkingLabel('collating');
+            updateStreamingMessage();
+            const source = result.source || 'external';
+            const context = result.content.slice(0, 6000);
+            gw.chatSend(
+              `Here is information from ${source} about the user's question "${lastQ}":\n\n---\n${context}\n---\n\nUsing the information above, write a complete, well-formatted answer to the user's question. Write directly — do not say "based on the information" or reference where it came from.`,
+              state.sessionKey
+            ).catch(() => { state.streaming = false; updateSendBtn(); });
+          } else {
+            // All external sources failed — ask Gemini to answer from training data
+            state.streaming = true;
+            setThinkingLabel('collating');
+            updateStreamingMessage();
+            state._nudgeCount = 2; // mark as second attempt
+            gw.chatSend(
+              `Just write any answer to: "${lastQ}". Use your training knowledge — even a brief, approximate answer is fine. Do NOT use any tools. Plain text only.`,
+              state.sessionKey
+            ).catch(() => { state.streaming = false; state._nudgeCount = 99; updateSendBtn(); });
+          }
+        });
+        return;
+      }
+
+      // Attempt 2 (or no question): plain text from Gemini's knowledge
+      if (state._nudgeCount === 2) {
         state.streaming = true;
         setThinkingLabel('collating');
         updateStreamingMessage();
-        const lastQ = state.messages.filter(m => m.role === 'user').slice(-1)[0]?.text || '';
-        // Nudge 1: try claude.ai for the answer
-        // Nudge 2: just answer from training knowledge, anything is fine
-        const nudgeMsg = state._nudgeCount === 1
-          ? (lastQ
-              ? `The user asked: "${lastQ}"\nPlease navigate to https://claude.ai/new and type that question in the chat input to get a live answer. Read the response and write it here. If claude.ai is unavailable, navigate to https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(lastQ)} and read the search results instead.`
-              : 'Navigate to https://claude.ai/new and ask the user\'s question there.')
-          : (lastQ
-              ? `Just write any answer to: "${lastQ}". Use your training knowledge — even a brief, approximate answer is fine. Do NOT use any tools. Plain text only.`
-              : 'Write any response as plain text. No tools.');
-        gw.chatSend(nudgeMsg, state.sessionKey)
+        const msg = lastQ
+          ? `Just write any answer to: "${lastQ}". Even a brief, approximate answer is fine. Do NOT use any tools. Plain text only.`
+          : 'Write any response as plain text. No tools.';
+        gw.chatSend(msg, state.sessionKey)
           .catch(() => { state.streaming = false; state._nudgeCount = 99; updateSendBtn(); });
         return;
       }
-      // All 3 attempts (original + 2 nudges) exhausted — give up exactly once
-      state.streamText = 'Gemini was unable to produce a text response. Try rephrasing, or add a data source URL for this topic.';
+
+      // All attempts exhausted — give up exactly once
+      state.streamText = 'Could not get a response. Try rephrasing, or add a data source URL for this topic.';
     } else {
       state._nudgeCount = 0;
     }
-    state._turnDone = true; // block straggling finals from duplicating this message
+    state._turnDone = true;
     finalizeMessage();
     resetThinkingLabel();
     if (state.pendingSkillRefresh) {
