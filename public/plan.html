@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nordic Studio — App Plan</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111318;
+    --surface2: #1a1d24;
+    --surface3: #22262f;
+    --border: #2a2f3a;
+    --accent: #5b6af0;
+    --accent2: #7c3aed;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --subtle: #374151;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* ── Layout ── */
+  .shell {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 28px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 8px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .logo-text { font-weight: 700; font-size: 15px; letter-spacing: -0.3px; }
+  .logo-sub { font-size: 10px; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; }
+
+  .nav-section { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 12px 8px 4px; }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 6px;
+    cursor: pointer; font-size: 13px; color: var(--muted);
+    transition: all 0.15s; user-select: none;
+    text-decoration: none;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: rgba(91,106,240,0.15); color: var(--accent); }
+  .nav-item .icon { font-size: 15px; width: 20px; text-align: center; }
+
+  .main { flex: 1; padding: 40px 48px; max-width: 1100px; }
+
+  /* ── Sections ── */
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .page-title {
+    font-size: 26px; font-weight: 700; letter-spacing: -0.5px;
+    margin-bottom: 6px;
+  }
+  .page-sub { color: var(--muted); margin-bottom: 32px; font-size: 14px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px 24px;
+  }
+  .card-title { font-weight: 600; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  /* ── Overview section ── */
+  .hero {
+    background: linear-gradient(135deg, rgba(91,106,240,0.12) 0%, rgba(124,58,237,0.08) 100%);
+    border: 1px solid rgba(91,106,240,0.25);
+    border-radius: 16px; padding: 32px 36px;
+    margin-bottom: 32px;
+  }
+  .hero h1 { font-size: 32px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; }
+  .hero h1 span { background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .hero p { color: var(--muted); font-size: 15px; max-width: 520px; line-height: 1.6; }
+
+  .pill-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    background: var(--surface2); border: 1px solid var(--border);
+  }
+  .pill.blue { background: rgba(91,106,240,0.15); border-color: rgba(91,106,240,0.3); color: #818cf8; }
+  .pill.purple { background: rgba(124,58,237,0.15); border-color: rgba(124,58,237,0.3); color: #a78bfa; }
+  .pill.green { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.25); color: #4ade80; }
+  .pill.amber { background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.25); color: #fbbf24; }
+
+  /* ── Journey flow ── */
+  .flow {
+    display: flex; align-items: flex-start; gap: 0;
+    margin-bottom: 32px; overflow-x: auto; padding-bottom: 8px;
+  }
+  .flow-step {
+    flex-shrink: 0; width: 160px;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+  }
+  .flow-node {
+    width: 52px; height: 52px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700;
+    background: var(--surface2); border: 2px solid var(--border);
+    position: relative; z-index: 1;
+    transition: all 0.2s;
+  }
+  .flow-step.done .flow-node { border-color: var(--green); background: rgba(34,197,94,0.12); }
+  .flow-step.current .flow-node { border-color: var(--accent); background: rgba(91,106,240,0.15); box-shadow: 0 0 0 4px rgba(91,106,240,0.15); }
+  .flow-step h4 { font-size: 12px; font-weight: 600; margin-top: 10px; }
+  .flow-step p { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+  .flow-connector {
+    flex-shrink: 0; width: 40px; height: 2px;
+    background: var(--border); margin-top: 25px;
+  }
+  .flow-connector.done { background: var(--green); }
+
+  /* ── Screen mockups ── */
+  .screen-wrap { margin-bottom: 48px; }
+  .screen-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--accent); font-weight: 600; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .screen-label::before { content: ''; display: block; width: 20px; height: 2px; background: var(--accent); border-radius: 1px; }
+
+  .mockup {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; overflow: hidden;
+  }
+  .mockup-bar {
+    background: var(--surface2); height: 36px;
+    display: flex; align-items: center; padding: 0 14px; gap: 7px;
+    border-bottom: 1px solid var(--border);
+  }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot.r { background: #ff5f56; } .dot.y { background: #febc2e; } .dot.g { background: #27c93f; }
+  .mockup-body { padding: 28px 32px; }
+
+  /* ── Welcome screen ── */
+  .welcome-center { text-align: center; padding: 40px 20px; }
+  .welcome-logo {
+    width: 72px; height: 72px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 20px; margin: 0 auto 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px;
+  }
+  .welcome-center h2 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 10px; }
+  .welcome-center p { color: var(--muted); max-width: 400px; margin: 0 auto 28px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 22px; border-radius: 8px; font-size: 14px; font-weight: 600;
+    cursor: pointer; border: none;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .feature-row { display: flex; justify-content: center; gap: 24px; margin-top: 24px; flex-wrap: wrap; }
+  .feature-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .feature-item span { font-size: 16px; }
+
+  /* ── Wizard ── */
+  .wizard-steps {
+    display: flex; gap: 0; margin-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .wstep {
+    padding: 10px 20px; font-size: 12px; font-weight: 600;
+    color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
+    cursor: pointer;
+  }
+  .wstep.done { color: var(--green); }
+  .wstep.active { color: var(--accent); border-color: var(--accent); }
+
+  .check-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: var(--surface2); border-radius: 8px;
+    margin-bottom: 8px; border: 1px solid var(--border);
+  }
+  .check-left { display: flex; align-items: center; gap: 12px; }
+  .check-icon { font-size: 18px; width: 28px; text-align: center; }
+  .check-name { font-weight: 500; font-size: 13px; }
+  .check-desc { font-size: 12px; color: var(--muted); }
+  .badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge.ok { background: rgba(34,197,94,0.15); color: #4ade80; }
+  .badge.warn { background: rgba(245,158,11,0.15); color: #fbbf24; }
+  .badge.err { background: rgba(239,68,68,0.15); color: #f87171; }
+
+  /* ── Dashboard ── */
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px;
+  }
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .stat-value { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+  .stat-meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.accent { color: var(--accent); }
+
+  .status-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 16px; border-bottom: 1px solid var(--border);
+  }
+  .status-row:last-child { border-bottom: none; }
+  .status-left { display: flex; align-items: center; gap: 12px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .status-dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.amber { background: var(--amber); }
+  .status-dot.grey { background: var(--subtle); }
+  .status-name { font-weight: 500; font-size: 13px; }
+  .status-desc { font-size: 12px; color: var(--muted); }
+  .status-right { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+
+  /* ── Data sources ── */
+  .source-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
+  }
+  .source-left { display: flex; align-items: center; gap: 12px; }
+  .source-icon { width: 36px; height: 36px; border-radius: 8px; background: var(--surface3); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .source-name { font-weight: 500; font-size: 13px; }
+  .source-url { font-size: 11px; color: var(--muted); font-family: monospace; }
+  .source-actions { display: flex; gap: 6px; }
+  .icon-btn {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: var(--surface3); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; cursor: pointer; color: var(--muted);
+  }
+
+  .add-source-box {
+    border: 1.5px dashed var(--border); border-radius: 8px;
+    padding: 20px; text-align: center; color: var(--muted);
+    font-size: 13px; cursor: pointer; margin-top: 8px;
+  }
+  .add-source-box:hover { border-color: var(--accent); color: var(--accent); background: rgba(91,106,240,0.04); }
+
+  /* ── Settings ── */
+  .setting-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 0; border-bottom: 1px solid var(--border);
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-left h4 { font-weight: 500; font-size: 13px; }
+  .setting-left p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .toggle {
+    width: 40px; height: 22px; border-radius: 11px; background: var(--green);
+    position: relative; cursor: pointer;
+  }
+  .toggle::after {
+    content: ''; position: absolute; top: 3px; right: 3px;
+    width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    transition: right 0.2s;
+  }
+  .toggle.off { background: var(--surface3); }
+  .toggle.off::after { right: auto; left: 3px; }
+  .setting-input {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; color: var(--text);
+    font-size: 13px; width: 200px;
+  }
+  .setting-select {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; color: var(--text);
+    font-size: 13px;
+  }
+
+  /* ── Plan notes ── */
+  .note-box {
+    background: rgba(91,106,240,0.08); border: 1px solid rgba(91,106,240,0.2);
+    border-radius: 8px; padding: 14px 16px; margin-top: 12px; font-size: 13px; color: #a5b4fc;
+    line-height: 1.6;
+  }
+  .note-box strong { color: #818cf8; }
+
+  .tag-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .tag { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font-size: 11px; color: var(--muted); }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .main { padding: 24px 20px; }
+    .sidebar { width: 200px; }
+    .stat-grid { grid-template-columns: 1fr 1fr; }
+    .grid-3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- Sidebar nav -->
+  <nav class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">🦅</div>
+      <div>
+        <div class="logo-text">Nordic Studio</div>
+        <div class="logo-sub">App Plan v1</div>
+      </div>
+    </div>
+
+    <div class="nav-section">Plan</div>
+    <a class="nav-item active" onclick="show('overview')">
+      <span class="icon">🗺</span> Overview
+    </a>
+    <a class="nav-item" onclick="show('journey')">
+      <span class="icon">🔀</span> User Journey
+    </a>
+
+    <div class="nav-section">Screens</div>
+    <a class="nav-item" onclick="show('welcome')">
+      <span class="icon">👋</span> Welcome
+    </a>
+    <a class="nav-item" onclick="show('wizard')">
+      <span class="icon">🪄</span> Setup Wizard
+    </a>
+    <a class="nav-item" onclick="show('dashboard')">
+      <span class="icon">📊</span> Dashboard
+    </a>
+    <a class="nav-item" onclick="show('chat')">
+      <span class="icon">💬</span> Chat
+    </a>
+    <a class="nav-item" onclick="show('sources')">
+      <span class="icon">🗄</span> Data Sources
+    </a>
+    <a class="nav-item" onclick="show('settings')">
+      <span class="icon">⚙️</span> Settings
+    </a>
+
+    <div class="nav-section">Discussion</div>
+    <a class="nav-item" onclick="show('questions')">
+      <span class="icon">❓</span> Open Questions
+    </a>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- ═══════════════════════════════════════════════
+         OVERVIEW
+    ═══════════════════════════════════════════════ -->
+    <section class="section active" id="s-overview">
+      <div class="hero">
+        <h1>Nordic Studio<br/><span>AI Agent Platform</span></h1>
+        <p>One app to download, set up, and manage your own AI agent. Powered by OpenClaw — no terminal, no config files, no fuss.</p>
+        <div class="pill-row">
+          <div class="pill blue">🚀 One-click deploy</div>
+          <div class="pill purple">🤖 OpenClaw gateway</div>
+          <div class="pill green">🌐 Browser relay</div>
+          <div class="pill amber">🗄 Custom data sources</div>
+          <div class="pill blue">💬 AI chat built-in</div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:24px">
+        <div class="card">
+          <div class="card-title">What it does</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <span style="font-size:18px">1️⃣</span>
+              <div><strong>Download & open</strong><br/><span style="color:var(--muted);font-size:12px">User downloads the macOS app — no setup needed to open it</span></div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <span style="font-size:18px">2️⃣</span>
+              <div><strong>Guided setup wizard</strong><br/><span style="color:var(--muted);font-size:12px">App checks requirements, installs OpenClaw, sets API key, starts the gateway — all automatically</span></div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <span style="font-size:18px">3️⃣</span>
+              <div><strong>Dashboard + Chat</strong><br/><span style="color:var(--muted);font-size:12px">Full management view — status, sessions, data sources — plus the AI chat interface</span></div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <span style="font-size:18px">4️⃣</span>
+              <div><strong>Ongoing management</strong><br/><span style="color:var(--muted);font-size:12px">Add data sources, switch AI models, monitor gateway health, update from one place</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Architecture</div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+              <div style="font-weight:600;margin-bottom:4px">🦅 NordicStudio.app</div>
+              <div style="color:var(--muted);font-size:12px">macOS WebView wrapper — serves the React/Vite UI</div>
+            </div>
+            <div style="text-align:center;color:var(--muted);font-size:12px">↕ WKWebView (app:// scheme)</div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+              <div style="font-weight:600;margin-bottom:4px">⚡ Nordic Studio UI <span style="font-size:11px;color:var(--muted)">(port 3928 / embedded)</span></div>
+              <div style="color:var(--muted);font-size:12px">Vite app — setup wizard, dashboard, chat, settings</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <div style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px">
+                <div style="font-weight:600">🤖 OpenClaw Gateway</div>
+                <div style="color:var(--muted)">ws://127.0.0.1:18789</div>
+              </div>
+              <div style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px">
+                <div style="font-weight:600">🌐 Browser Relay</div>
+                <div style="color:var(--muted)">http://127.0.0.1:9999</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Screens at a glance</div>
+        <div class="grid-3" style="gap:12px">
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-size:20px;margin-bottom:8px">👋</div>
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px">Welcome</div>
+            <div style="font-size:12px;color:var(--muted)">First launch splash. Detects fresh install vs returning user. CTA to start setup or go to dashboard.</div>
+          </div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-size:20px;margin-bottom:8px">🪄</div>
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px">Setup Wizard</div>
+            <div style="font-size:12px;color:var(--muted)">5-step wizard. Checks Node/npm, installs OpenClaw, API key entry, relay setup, launch & verify.</div>
+          </div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-size:20px;margin-bottom:8px">📊</div>
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px">Dashboard</div>
+            <div style="font-size:12px;color:var(--muted)">Live status of all services. Session count, message count, uptime. Quick restart/stop controls.</div>
+          </div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-size:20px;margin-bottom:8px">💬</div>
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px">Chat</div>
+            <div style="font-size:12px;color:var(--muted)">The existing Nordic Studio AI chat — Gemini + claude.ai relay + DDG. Moved here as a tab.</div>
+          </div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-size:20px;margin-bottom:8px">🗄</div>
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px">Data Sources</div>
+            <div style="font-size:12px;color:var(--muted)">Add URLs, APIs, PDFs as context. Name them, set refresh interval, see last-fetched status.</div>
+          </div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-size:20px;margin-bottom:8px">⚙️</div>
+            <div style="font-weight:600;font-size:13px;margin-bottom:4px">Settings</div>
+            <div style="font-size:12px;color:var(--muted)">API keys, model selection, gateway config, browser relay port, auto-start on login, update.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+         USER JOURNEY
+    ═══════════════════════════════════════════════ -->
+    <section class="section" id="s-journey">
+      <div class="page-title">User Journey</div>
+      <div class="page-sub">End-to-end flow from first download to fully operational AI agent</div>
+
+      <!-- First-time flow -->
+      <div class="screen-label">First-time user</div>
+      <div class="flow" style="margin-bottom:40px">
+        <div class="flow-step done">
+          <div class="flow-node">⬇️</div>
+          <h4>Download</h4>
+          <p>Download NordicStudio.app from GitHub / site</p>
+        </div>
+        <div class="flow-connector done"></div>
+        <div class="flow-step done">
+          <div class="flow-node">👋</div>
+          <h4>Welcome</h4>
+          <p>First-launch screen, explains the app</p>
+        </div>
+        <div class="flow-connector done"></div>
+        <div class="flow-step current">
+          <div class="flow-node">🪄</div>
+          <h4>Setup Wizard</h4>
+          <p>5 steps, all automated where possible</p>
+        </div>
+        <div class="flow-connector"></div>
+        <div class="flow-step">
+          <div class="flow-node">✅</div>
+          <h4>All Systems Go</h4>
+          <p>Gateway + relay running, API key set</p>
+        </div>
+        <div class="flow-connector"></div>
+        <div class="flow-step">
+          <div class="flow-node">📊</div>
+          <h4>Dashboard</h4>
+          <p>Manage, monitor, chat</p>
+        </div>
+      </div>
+
+      <!-- Wizard steps breakdown -->
+      <div class="screen-label">Setup wizard steps</div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:40px">
+        <div class="check-row">
+          <div class="check-left">
+            <div class="check-icon">🔍</div>
+            <div>
+              <div class="check-name">Step 1 — Requirements check</div>
+              <div class="check-desc">Auto-detect Node.js, npm, Homebrew. If missing, show install instructions with one-click install button.</div>
+            </div>
+          </div>
+          <div class="badge ok">Automated</div>
+        </div>
+        <div class="check-row">
+          <div class="check-left">
+            <div class="check-icon">📦</div>
+            <div>
+              <div class="check-name">Step 2 — Install OpenClaw</div>
+              <div class="check-desc">Run <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">npm install -g openclaw</code> in a visible terminal output panel. Shows progress.</div>
+            </div>
+          </div>
+          <div class="badge ok">Automated</div>
+        </div>
+        <div class="check-row">
+          <div class="check-left">
+            <div class="check-icon">🔑</div>
+            <div>
+              <div class="check-name">Step 3 — API key</div>
+              <div class="check-desc">Enter Gemini API key (link to Google AI Studio to get one). Saved securely to macOS Keychain.</div>
+            </div>
+          </div>
+          <div class="badge warn">User input needed</div>
+        </div>
+        <div class="check-row">
+          <div class="check-left">
+            <div class="check-icon">🌐</div>
+            <div>
+              <div class="check-name">Step 4 — Browser relay</div>
+              <div class="check-desc">Start relay server. Link to install the Chrome extension (opens Chrome Web Store). Ping test to confirm connected.</div>
+            </div>
+          </div>
+          <div class="badge warn">User installs extension</div>
+        </div>
+        <div class="check-row">
+          <div class="check-left">
+            <div class="check-icon">🚀</div>
+            <div>
+              <div class="check-name">Step 5 — Launch & verify</div>
+              <div class="check-desc">Start OpenClaw gateway. Send a test ping. Show green status. Register as login item (optional). Done.</div>
+            </div>
+          </div>
+          <div class="badge ok">Automated</div>
+        </div>
+      </div>
+
+      <!-- Returning user -->
+      <div class="screen-label">Returning user (app already set up)</div>
+      <div class="flow">
+        <div class="flow-step done">
+          <div class="flow-node">🦅</div>
+          <h4>Open App</h4>
+          <p>App opens directly to Dashboard</p>
+        </div>
+        <div class="flow-connector done"></div>
+        <div class="flow-step done">
+          <div class="flow-node">⚡</div>
+          <h4>Auto-start</h4>
+          <p>Gateway + relay start in background</p>
+        </div>
+        <div class="flow-connector done"></div>
+        <div class="flow-step current">
+          <div class="flow-node">📊</div>
+          <h4>Dashboard</h4>
+          <p>All green. Ready to use.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+         WELCOME SCREEN
+    ═══════════════════════════════════════════════ -->
+    <section class="section" id="s-welcome">
+      <div class="page-title">Welcome Screen</div>
+      <div class="page-sub">Shown on first launch only. Skipped for returning users.</div>
+
+      <div class="screen-wrap">
+        <div class="screen-label">Mockup — First launch</div>
+        <div class="mockup">
+          <div class="mockup-bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+          <div class="mockup-body">
+            <div class="welcome-center">
+              <div class="welcome-logo">🦅</div>
+              <h2>Welcome to Nordic Studio</h2>
+              <p>Your own AI agent — set up in minutes. No terminal, no config files. Just click through and you're live.</p>
+              <div style="display:flex;gap:10px;justify-content:center">
+                <button class="btn btn-primary">Get Started →</button>
+                <button class="btn btn-ghost">I already have OpenClaw</button>
+              </div>
+              <div class="feature-row">
+                <div class="feature-item"><span>🤖</span> Gemini 2.5 Flash</div>
+                <div class="feature-item"><span>🌐</span> Live web search</div>
+                <div class="feature-item"><span>🔒</span> Runs locally</div>
+                <div class="feature-item"><span>⚡</span> Auto-managed</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="note-box">
+        <strong>Logic:</strong> App stores a flag on first successful setup completion. On subsequent opens it skips straight to Dashboard. A "Redo setup" option lives in Settings for users who want to reconfigure.
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+         WIZARD
+    ═══════════════════════════════════════════════ -->
+    <section class="section" id="s-wizard">
+      <div class="page-title">Setup Wizard</div>
+      <div class="page-sub">5 steps, mostly automated. User only needs to provide their API key and install the extension.</div>
+
+      <div class="screen-wrap">
+        <div class="screen-label">Mockup — Step 1: Requirements check</div>
+        <div class="mockup">
+          <div class="mockup-bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+          <div class="mockup-body">
+            <h3 style="margin-bottom:4px">Checking your system</h3>
+            <p style="color:var(--muted);font-size:13px;margin-bottom:20px">Nordic Studio needs a few things to run. We'll install anything that's missing.</p>
+            <div class="wizard-steps">
+              <div class="wstep active">1 Requirements</div>
+              <div class="wstep">2 Install</div>
+              <div class="wstep">3 API Key</div>
+              <div class="wstep">4 Relay</div>
+              <div class="wstep">5 Launch</div>
+            </div>
+            <div class="check-row"><div class="check-left"><div class="check-icon">🟢</div><div><div class="check-name">Node.js v22.4.0</div><div class="check-desc">JavaScript runtime required by OpenClaw</div></div></div><div class="badge ok">✓ Found</div></div>
+            <div class="check-row"><div class="check-left"><div class="check-icon">🟢</div><div><div class="check-name">npm 10.7.0</div><div class="check-desc">Package manager for installing OpenClaw</div></div></div><div class="badge ok">✓ Found</div></div>
+            <div class="check-row"><div class="check-left"><div class="check-icon">🟡</div><div><div class="check-name">OpenClaw</div><div class="check-desc">Not yet installed — will install in the next step</div></div></div><div class="badge warn">Will install</div></div>
+            <div style="margin-top:20px;display:flex;justify-content:flex-end">
+              <button class="btn btn-primary">Continue →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="screen-wrap">
+        <div class="screen-label">Mockup — Step 3: API Key</div>
+        <div class="mockup">
+          <div class="mockup-bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+          <div class="mockup-body">
+            <h3 style="margin-bottom:4px">Enter your Gemini API key</h3>
+            <p style="color:var(--muted);font-size:13px;margin-bottom:20px">Get a free key from Google AI Studio. It stays on your device — never sent anywhere.</p>
+            <div class="wizard-steps">
+              <div class="wstep done">1 Requirements</div>
+              <div class="wstep done">2 Install</div>
+              <div class="wstep active">3 API Key</div>
+              <div class="wstep">4 Relay</div>
+              <div class="wstep">5 Launch</div>
+            </div>
+            <div style="margin:16px 0 8px;font-size:12px;color:var(--muted)">GEMINI API KEY</div>
+            <input style="width:100%;background:var(--surface2);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;color:var(--text);font-size:13px;font-family:monospace" placeholder="AIzaSy..." value="AIzaSyB••••••••••••••••••••••••" />
+            <div style="font-size:12px;color:var(--muted);margin-top:8px">Stored in macOS Keychain. <a style="color:var(--accent);text-decoration:none" href="#">Get a key →</a></div>
+            <div style="margin-top:20px;display:flex;justify-content:space-between;align-items:center">
+              <button class="btn btn-ghost">← Back</button>
+              <button class="btn btn-primary">Save & Continue →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="screen-wrap">
+        <div class="screen-label">Mockup — Step 5: Launch</div>
+        <div class="mockup">
+          <div class="mockup-bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+          <div class="mockup-body" style="text-align:center;padding:40px">
+            <div style="font-size:52px;margin-bottom:16px">✅</div>
+            <h2 style="margin-bottom:8px">All systems go!</h2>
+            <p style="color:var(--muted);margin-bottom:24px">OpenClaw gateway is running. Browser relay is connected. Your AI agent is live.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;max-width:300px;margin:0 auto 24px">
+              <div class="check-row" style="background:rgba(34,197,94,0.06);border-color:rgba(34,197,94,0.2)"><div class="check-left"><div class="check-icon">⚡</div><div class="check-name">Gateway</div></div><div class="badge ok">Running</div></div>
+              <div class="check-row" style="background:rgba(34,197,94,0.06);border-color:rgba(34,197,94,0.2)"><div class="check-left"><div class="check-icon">🌐</div><div class="check-name">Browser Relay</div></div><div class="badge ok">Connected</div></div>
+              <div class="check-row" style="background:rgba(34,197,94,0.06);border-color:rgba(34,197,94,0.2)"><div class="check-left"><div class="check-icon">🤖</div><div class="check-name">Gemini API</div></div><div class="badge ok">Verified</div></div>
+            </div>
+            <button class="btn btn-primary" style="font-size:15px;padding:13px 28px">Open Dashboard →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+         DASHBOARD
+    ═══════════════════════════════════════════════ -->
+    <section class="section" id="s-dashboard">
+      <div class="page-title">Dashboard</div>
+      <div class="page-sub">Home base for managing your AI agent. Live status, stats, quick controls.</div>
+
+      <div class="screen-wrap">
+        <div class="screen-label">Mockup</div>
+        <div class="mockup">
+          <div class="mockup-bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+          <div class="mockup-body">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+              <div>
+                <h3 style="font-size:16px;font-weight:700">Dashboard</h3>
+                <div style="font-size:12px;color:var(--muted)">Everything looks healthy</div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-ghost" style="font-size:12px;padding:7px 14px">↺ Restart all</button>
+                <button class="btn btn-ghost" style="font-size:12px;padding:7px 14px">⏹ Stop all</button>
+              </div>
+            </div>
+
+            <div class="stat-grid">
+              <div class="stat-card"><div class="stat-label">Gateway</div><div class="stat-value green">Live</div><div class="stat-meta">ws://127.0.0.1:18789</div></div>
+              <div class="stat-card"><div class="stat-label">Uptime</div><div class="stat-value accent">4h 23m</div><div class="stat-meta">Since 14:38 today</div></div>
+              <div class="stat-card"><div class="stat-label">Messages today</div><div class="stat-value">142</div><div class="stat-meta">↑ 38 vs yesterday</div></div>
+              <div class="stat-card"><div class="stat-label">Relay</div><div class="stat-value green">Live</div><div class="stat-meta">port 9999</div></div>
+            </div>
+
+            <div class="card" style="margin-bottom:16px">
+              <div class="card-title">Services</div>
+              <div class="status-row"><div class="status-left"><div class="status-dot green"></div><div><div class="status-name">OpenClaw Gateway</div><div class="status-desc">Gemini 2.5 Flash · ws://127.0.0.1:18789</div></div></div><div class="status-right"><span>18 789</span><button class="icon-btn">↺</button></div></div>
+              <div class="status-row"><div class="status-left"><div class="status-dot green"></div><div><div class="status-name">Browser Relay</div><div class="status-desc">Chrome extension connected · 1 tab</div></div></div><div class="status-right"><span>9 999</span><button class="icon-btn">↺</button></div></div>
+              <div class="status-row"><div class="status-left"><div class="status-dot amber"></div><div><div class="status-name">Auto-start</div><div class="status-desc">Not registered as login item</div></div></div><div class="status-right"><button class="btn btn-ghost" style="font-size:11px;padding:4px 10px">Enable</button></div></div>
+            </div>
+
+            <div class="card">
+              <div class="card-title">Recent activity</div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;justify-content:space-between;font-size:12px;padding:8px 0;border-bottom:1px solid var(--border)"><span>Chat session started</span><span style="color:var(--muted)">2 min ago</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;padding:8px 0;border-bottom:1px solid var(--border)"><span>DDG search — "bitcoin price"</span><span style="color:var(--muted)">14 min ago</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;padding:8px 0;border-bottom:1px solid var(--border)"><span>claude.ai relay — essay request</span><span style="color:var(--muted)">41 min ago</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;padding:8px 0"><span>Gateway restarted</span><span style="color:var(--muted)">4h ago</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+         CHAT
+    ═══════════════════════════════════════════════ -->
+    <section class="section" id="s-chat">
+      <div class="page-title">Chat</div>
+      <div class="page-sub">The existing Nordic Studio AI chat — moved in as a tab. No rework needed here beyond nav integration.</div>
+
+      <div class="note-box" style="margin-bottom:24px">
+        <strong>No major changes needed.</strong> The existing chat UI (with Gemini + DDG + claude.ai relay, smart routing, mindmap tab) just needs to be integrated as one tab of the new app shell. The sidebar nav replaces the current top-bar.
+      </div>
+
+      <div class="card">
+        <div class="card-title">What stays the same</div>
+        <div class="tag-row">
+          <div class="tag">Smart DDG vs claude.ai routing</div>
+          <div class="tag">No-search for greetings</div>
+          <div class="tag">Pinned tab reuse</div>
+          <div class="tag">Custom data sources in chat</div>
+          <div class="tag">Mindmap tab</div>
+          <div class="tag">Streaming responses</div>
+          <div class="tag">_turnDone duplicate guard</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+         DATA SOURCES
+    ═══════════════════════════════════════════════ -->
+    <section class="section" id="s-sources">
+      <div class="page-title">Data Sources</div>
+      <div class="page-sub">Named, manageable context URLs. The chat checks these first before DDG or claude.ai.</div>
+
+      <div class="screen-wrap">
+        <div class="screen-label">Mockup</div>
+        <div class="mockup">
+          <div class="mockup-bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+          <div class="mockup-body">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+              <div>
+                <h3 style="font-size:16px;font-weight:700">Data Sources</h3>
+                <div style="font-size:12px;color:var(--muted)">Checked first before any web search</div>
+              </div>
+              <button class="btn btn-primary" style="font-size:12px;padding:7px 14px">+ Add source</button>
+            </div>
+
+            <div class="source-item">
+              <div class="source-left">
+                <div class="source-icon">📰</div>
+                <div>
+                  <div class="source-name">Company Blog</div>
+                  <div class="source-url">https://blog.example.com/rss</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <div class="badge ok">Active</div>
+                <div class="source-actions"><div class="icon-btn">✎</div><div class="icon-btn">🗑</div></div>
+              </div>
+            </div>
+            <div class="source-item">
+              <div class="source-left">
+                <div class="source-icon">📊</div>
+                <div>
+                  <div class="source-name">Sales Dashboard</div>
+                  <div class="source-url">https://internal.corp/api/sales-summary</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <div class="badge ok">Active</div>
+                <div class="source-actions"><div class="icon-btn">✎</div><div class="icon-btn">🗑</div></div>
+              </div>
+            </div>
+            <div class="source-item">
+              <div class="source-left">
+                <div class="source-icon">📄</div>
+                <div>
+                  <div class="source-name">Product Docs</div>
+                  <div class="source-url">https://docs.myproduct.io</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <div class="badge warn">Stale</div>
+                <div class="source-actions"><div class="icon-btn">↺</div><div class="icon-btn">🗑</div></div>
+              </div>
+            </div>
+
+            <div class="add-source-box">+ Add a URL, RSS feed, or API endpoint</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="note-box">
+        <strong>Enhancement over current state:</strong> Right now custom sources are just a list of URLs. This screen adds names, status (active/stale), last-fetched timestamp, and a manual refresh button per source.
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+         SETTINGS
+    ═══════════════════════════════════════════════ -->
+    <section class="section" id="s-settings">
+      <div class="page-title">Settings</div>
+      <div class="page-sub">All configuration in one place. No more editing JSON files manually.</div>
+
+      <div class="screen-wrap">
+        <div class="screen-label">Mockup</div>
+        <div class="mockup">
+          <div class="mockup-bar"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+          <div class="mockup-body">
+            <div class="card" style="margin-bottom:16px">
+              <div class="card-title">AI Model</div>
+              <div class="setting-row"><div class="setting-left"><h4>Model</h4><p>Which Gemini model to use for chat</p></div><select class="setting-select"><option>gemini-2.5-flash</option><option>gemini-2.0-flash</option><option>gemini-1.5-pro</option></select></div>
+              <div class="setting-row"><div class="setting-left"><h4>Gemini API Key</h4><p>Stored in macOS Keychain</p></div><input class="setting-input" type="password" value="AIzaSyB••••••••••••" /></div>
+            </div>
+            <div class="card" style="margin-bottom:16px">
+              <div class="card-title">Services</div>
+              <div class="setting-row"><div class="setting-left"><h4>Gateway port</h4><p>OpenClaw WebSocket port</p></div><input class="setting-input" value="18789" /></div>
+              <div class="setting-row"><div class="setting-left"><h4>Relay port</h4><p>Browser relay HTTP port</p></div><input class="setting-input" value="9999" /></div>
+              <div class="setting-row"><div class="setting-left"><h4>Start on login</h4><p>Launch services when you log in to macOS</p></div><div class="toggle"></div></div>
+              <div class="setting-row"><div class="setting-left"><h4>OpenClaw browser</h4><p>Disable OpenClaw's own Chromium (use relay instead)</p></div><div class="toggle off"></div></div>
+            </div>
+            <div class="card">
+              <div class="card-title">App</div>
+              <div class="setting-row"><div class="setting-left"><h4>Nordic Studio v2.0.0</h4><p>Up to date</p></div><button class="btn btn-ghost" style="font-size:12px;padding:6px 12px">Check for updates</button></div>
+              <div class="setting-row"><div class="setting-left"><h4>Re-run setup wizard</h4><p>Reconfigure from scratch</p></div><button class="btn btn-ghost" style="font-size:12px;padding:6px 12px">Open wizard</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+         OPEN QUESTIONS
+    ═══════════════════════════════════════════════ -->
+    <section class="section" id="s-questions">
+      <div class="page-title">Open Questions</div>
+      <div class="page-sub">Things to decide before implementation starts</div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="card">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:20px">❓</span>
+            <div>
+              <div style="font-weight:600;font-size:14px;margin-bottom:4px">Q1 — App name</div>
+              <div style="color:var(--muted);font-size:13px">Is "Nordic Studio" still the right name now that it's a full setup + management platform, not just an AI chat? Options: <strong>Nordic Studio</strong> (keep), <strong>Claw</strong> (simpler), <strong>Arboretum</strong> (already in the UI), something else?</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:20px">❓</span>
+            <div>
+              <div style="font-weight:600;font-size:14px;margin-bottom:4px">Q2 — Other AI agents besides OpenClaw?</div>
+              <div style="color:var(--muted);font-size:13px">You mentioned "OpenClaw or any AI agent". Should the setup wizard support other agents (LangChain, AutoGen, CrewAI)? Or is OpenClaw-only fine for v1?</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:20px">❓</span>
+            <div>
+              <div style="font-weight:600;font-size:14px;margin-bottom:4px">Q3 — Distribution</div>
+              <div style="color:var(--muted);font-size:13px">How will users download the app? GitHub Releases, a landing page, or Mac App Store? This affects code signing and notarisation requirements.</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:20px">❓</span>
+            <div>
+              <div style="font-weight:600;font-size:14px;margin-bottom:4px">Q4 — Antigravity / IDE integration</div>
+              <div style="color:var(--muted);font-size:13px">You mentioned wanting to use Antigravity. Should the app support opening the project in an IDE directly from the UI? Or is that out of scope for now?</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  function show(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('s-' + id).classList.add('active');
+    event.currentTarget.classList.add('active');
+  }
+</script>
+</body>
+</html>

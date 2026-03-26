@@ -149,7 +149,7 @@ async function fetchExternalAnswer(question) {
       if (data.ok && data.content?.text && data.content.text.length > 100) {
         return { source: src.url, content: data.content.text };
       }
-    } catch {}
+    } catch { }
   }
 
   const useClaudeFirst = needsClaudeAi(question);
@@ -370,7 +370,7 @@ gw.on('chat', (payload) => {
   }
 
   // Catch-all: any chat event with text we haven't handled
-  if (!['delta','final','error','start'].includes(payload.state) && evtText) {
+  if (!['delta', 'final', 'error', 'start'].includes(payload.state) && evtText) {
     clearResponseTimer();
     state.streaming = false;
     if (!state.streamText) state.streamText = evtText;
@@ -388,17 +388,17 @@ gw.connect();
 
 // ── Color / category system ───────────────────────────────────────────────────
 const CAT_META = {
-  search:       { label: 'Search & Web',    border: '#3b82f6', bg: '#eff6ff', line: '#60a5fa', icon: 'search' },
-  code:         { label: 'Code & Dev',      border: '#6b7280', bg: '#f9fafb', line: '#9ca3af', icon: 'terminal' },
-  comms:        { label: 'Communication',   border: '#6366f1', bg: '#eef2ff', line: '#818cf8', icon: 'chat' },
-  data:         { label: 'Data & Storage',  border: '#f59e0b', bg: '#fffbeb', line: '#fbbf24', icon: 'storage' },
-  ai:           { label: 'AI & Models',     border: '#8b5cf6', bg: '#f5f3ff', line: '#a78bfa', icon: 'smart_toy' },
-  productivity: { label: 'Productivity',    border: '#0d9488', bg: '#f0fdfa', line: '#2dd4bf', icon: 'calendar_today' },
-  media:        { label: 'Media',           border: '#ec4899', bg: '#fdf2f8', line: '#f472b6', icon: 'image' },
-  files:        { label: 'Files & Storage', border: '#d97706', bg: '#fffbeb', line: '#fb923c', icon: 'folder' },
-  default:      { label: 'Tools',           border: '#496250', bg: '#f0fdf4', line: '#86efac', icon: 'build' },
-  presence:     { label: 'Connected',       border: '#f97316', bg: '#fff7ed', line: '#fb923c', icon: 'computer' },
-  sources:      { label: 'Data Sources',    border: '#0ea5e9', bg: '#f0f9ff', line: '#38bdf8', icon: 'link' },
+  search: { label: 'Search & Web', border: '#3b82f6', bg: '#eff6ff', line: '#60a5fa', icon: 'search' },
+  code: { label: 'Code & Dev', border: '#6b7280', bg: '#f9fafb', line: '#9ca3af', icon: 'terminal' },
+  comms: { label: 'Communication', border: '#6366f1', bg: '#eef2ff', line: '#818cf8', icon: 'chat' },
+  data: { label: 'Data & Storage', border: '#f59e0b', bg: '#fffbeb', line: '#fbbf24', icon: 'storage' },
+  ai: { label: 'AI & Models', border: '#8b5cf6', bg: '#f5f3ff', line: '#a78bfa', icon: 'smart_toy' },
+  productivity: { label: 'Productivity', border: '#0d9488', bg: '#f0fdfa', line: '#2dd4bf', icon: 'calendar_today' },
+  media: { label: 'Media', border: '#ec4899', bg: '#fdf2f8', line: '#f472b6', icon: 'image' },
+  files: { label: 'Files & Storage', border: '#d97706', bg: '#fffbeb', line: '#fb923c', icon: 'folder' },
+  default: { label: 'Tools', border: '#496250', bg: '#f0fdf4', line: '#86efac', icon: 'build' },
+  presence: { label: 'Connected', border: '#f97316', bg: '#fff7ed', line: '#fb923c', icon: 'computer' },
+  sources: { label: 'Data Sources', border: '#0ea5e9', bg: '#f0f9ff', line: '#38bdf8', icon: 'link' },
 };
 
 function skillCategory(name, description) {
@@ -441,7 +441,7 @@ function extractText(value) {
 
 function escapeHtml(s) {
   if (typeof s !== 'string') s = String(s || '');
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function renderMarkdown(raw) {
@@ -452,7 +452,7 @@ function renderMarkdown(raw) {
 
   // Pull out fenced code blocks before escaping
   let text = raw.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-    blocks.push(`<pre class="md-pre"><code class="${lang ? 'lang-'+lang : ''}">${escapeHtml(code.trim())}</code></pre>`);
+    blocks.push(`<pre class="md-pre"><code class="${lang ? 'lang-' + lang : ''}">${escapeHtml(code.trim())}</code></pre>`);
     return PLACEHOLDER + (blocks.length - 1) + PLACEHOLDER;
   });
 
@@ -469,8 +469,8 @@ function renderMarkdown(raw) {
   text = text.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
   // Headers (must come before list rules)
   text = text.replace(/^### (.+)$/gm, '<h3 class="md-h3">$1</h3>');
-  text = text.replace(/^## (.+)$/gm,  '<h2 class="md-h2">$1</h2>');
-  text = text.replace(/^# (.+)$/gm,   '<h1 class="md-h1">$1</h1>');
+  text = text.replace(/^## (.+)$/gm, '<h2 class="md-h2">$1</h2>');
+  text = text.replace(/^# (.+)$/gm, '<h1 class="md-h1">$1</h1>');
   // Horizontal rule
   text = text.replace(/^(?:---+|___+|\*\*\*+)$/gm, '<hr class="md-hr">');
   // Unordered list items
@@ -546,8 +546,8 @@ function timeAgo(ts) {
   const s = Math.floor((Date.now() - ts) / 1000);
   if (s < 5) return 'just now';
   if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s/60)}m ago`;
-  return `${Math.floor(s/3600)}h ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  return `${Math.floor(s / 3600)}h ago`;
 }
 
 // ── Skills / categorized mindmap ──────────────────────────────────────────────
@@ -565,7 +565,7 @@ function saveToCatalog(skills) {
       };
     }
     localStorage.setItem('nordic-skill-catalog', JSON.stringify(existing));
-  } catch {}
+  } catch { }
 }
 
 function getCatalog() {
@@ -775,7 +775,7 @@ async function loadPresence() {
     const res = await gw.systemPresence();
     const entries = Array.isArray(res) ? res : (res?.presence || Object.values(res || {}));
     updatePresenceData(entries);
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function updatePresenceData(entries) {
@@ -924,7 +924,7 @@ async function loadHistory() {
       role: m.role || (m.from === 'user' ? 'user' : 'assistant'),
       text: extractText(m.text || m.content || m.message || '')
     })).filter(m => m.text);
-  } catch (_) {}
+  } catch (_) { }
   renderMessages();
 }
 
@@ -1001,8 +1001,8 @@ function updateStreamingMessage() {
       </div>
       <div class="text-on-surface text-[15px] leading-relaxed md-body bg-surface-container-lowest/80 backdrop-blur-sm border border-outline-variant/20 px-5 py-4 rounded-2xl rounded-tl-sm shadow-[0_4px_24px_rgba(0,0,0,0.04)]">
       ${state.streamText
-        ? renderMarkdown(state.streamText)
-        : `<div class="flex items-center gap-2 py-1">
+      ? renderMarkdown(state.streamText)
+      : `<div class="flex items-center gap-2 py-1">
              <span class="thinking-pulse"></span>
              <span class="thinking-label text-xs font-medium text-primary/70 italic">${state.thinkingLabel || 'researching'}…</span>
            </div>`}
@@ -1093,44 +1093,44 @@ function renderSidebarPanel() {
   if (!el) return;
   const items = state.sessions.length
     ? state.sessions.map(s => {
-        const CLIENT_NAMES = ['taiga', 'openclaw', 'arboretum'];
-        const isClientName = t => CLIENT_NAMES.includes((t || '').toLowerCase().trim());
-        const firstUserText = extractText(
-          s.firstMessage?.role === 'user' ? (s.firstMessage?.content || s.firstMessage?.text) :
-          s.lastMessage?.role  === 'user' ? (s.lastMessage?.content  || s.lastMessage?.text)  : ''
-        );
-        const candidates = [
-          !isClientName(s.derivedTitle) ? s.derivedTitle : null,
-          !isClientName(s.label)        ? s.label        : null,
-          firstUserText,
-          extractText(s.lastMessage?.content || s.lastMessage?.text || ''),
-        ].filter(Boolean);
-        let rawTitle = candidates.find(c => {
-          const cl = c.trim();
-          return cl.length > 3 && !cl.startsWith('{') && !cl.startsWith('[') && !cl.includes('```') && !cl.startsWith('Sender') && !isClientName(cl);
-        }) || s.key || 'Untitled';
-        rawTitle = rawTitle.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '').trim();
-        rawTitle = rawTitle.split('\n').map(l => l.trim()).find(l => l.length > 3 && !/^[{[\(]/.test(l) && !l.startsWith('Sender')) || rawTitle;
-        rawTitle = rawTitle.replace(/^[^a-zA-Z0-9"'(\u00C0-\u024F]+/, '').replace(/\*\*/g, '').trim();
-        const title = rawTitle.slice(0, 60) || 'Untitled';
-        const key = s.key || s.sessionKey || s.id || '';
-        const active = key === state.sessionKey;
-        
-        return `
-          <a class="sidebar-item-padding flex items-center gap-3 py-2 px-3 rounded-lg transition-all duration-200 cursor-pointer ${active ? 'bg-white dark:bg-slate-800 text-[#4a6453] dark:text-[#ffffff] shadow-sm font-semibold border border-black/5' : 'text-on-surface-variant dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-900'}" onclick="window._selectSession('${escapeHtml(key)}')">
+      const CLIENT_NAMES = ['taiga', 'openclaw', 'arboretum'];
+      const isClientName = t => CLIENT_NAMES.includes((t || '').toLowerCase().trim());
+      const firstUserText = extractText(
+        s.firstMessage?.role === 'user' ? (s.firstMessage?.content || s.firstMessage?.text) :
+          s.lastMessage?.role === 'user' ? (s.lastMessage?.content || s.lastMessage?.text) : ''
+      );
+      const candidates = [
+        !isClientName(s.derivedTitle) ? s.derivedTitle : null,
+        !isClientName(s.label) ? s.label : null,
+        firstUserText,
+        extractText(s.lastMessage?.content || s.lastMessage?.text || ''),
+      ].filter(Boolean);
+      let rawTitle = candidates.find(c => {
+        const cl = c.trim();
+        return cl.length > 3 && !cl.startsWith('{') && !cl.startsWith('[') && !cl.includes('```') && !cl.startsWith('Sender') && !isClientName(cl);
+      }) || s.key || 'Untitled';
+      rawTitle = rawTitle.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '').trim();
+      rawTitle = rawTitle.split('\n').map(l => l.trim()).find(l => l.length > 3 && !/^[{[\(]/.test(l) && !l.startsWith('Sender')) || rawTitle;
+      rawTitle = rawTitle.replace(/^[^a-zA-Z0-9"'(\u00C0-\u024F]+/, '').replace(/\*\*/g, '').trim();
+      const title = rawTitle.slice(0, 60) || 'Untitled';
+      const key = s.key || s.sessionKey || s.id || '';
+      const active = key === state.sessionKey;
+
+      return `
+          <a class="flex items-center gap-3 px-4 py-2 rounded-lg transition-transform duration-300 ease-in-out cursor-pointer ${active ? 'bg-[#fbfdfc] dark:bg-[#2c3630] text-[#506A58] font-bold shadow-sm' : 'text-[#506A58]/70 dark:text-[#a8b5b2] hover:bg-[#fbfdfc]/60 dark:hover:bg-[#2c3630]/50'}" onclick="window._selectSession('${escapeHtml(key)}')">
             <span class="material-symbols-outlined shrink-0 text-[18px]" style="${active ? 'font-variation-settings:\'FILL\' 1;' : ''}">chat_bubble</span>
             <span class="truncate font-inter text-sm sidebar-item-text">${escapeHtml(title)}</span>
           </a>
         `;
-      }).join('')
+    }).join('')
     : '<div class="text-xs text-slate-400 px-3 py-4 text-center sidebar-item-text">No recent sessions</div>';
-    
+
   el.innerHTML = items;
 }
 
 // ── Mindmap pan/zoom/drag ─────────────────────────────────────────────────────
 const drag = { active: false, nodeId: null, sx: 0, sy: 0, nx: 0, ny: 0, moved: false };
-const pan  = { active: false, sx: 0, sy: 0, ox: 0, oy: 0 };
+const pan = { active: false, sx: 0, sy: 0, ox: 0, oy: 0 };
 
 function applyWorldTransform() {
   const w = document.getElementById('mindmap-world');
@@ -1144,7 +1144,7 @@ function initMindmap() {
 
   if (!state._mapCentered) {
     const center = state.mindmapNodes.find(n => n.id === 'center') || { x: 2500, y: 2500 };
-    state.mapPanX = canvas.clientWidth  / 2 - center.x - 48;
+    state.mapPanX = canvas.clientWidth / 2 - center.x - 48;
     state.mapPanY = canvas.clientHeight / 2 - center.y - 48;
     state._mapCentered = true;
     applyWorldTransform();
@@ -1180,7 +1180,7 @@ function initMindmap() {
   }, { passive: false });
 
   window.addEventListener('mousemove', onMindmapMouseMove);
-  window.addEventListener('mouseup',   onMindmapMouseUp);
+  window.addEventListener('mouseup', onMindmapMouseUp);
   startPresencePoll();
 }
 
@@ -1195,12 +1195,12 @@ function onMindmapMouseMove(e) {
     const targetY = drag.ny + dy / state.mapScale;
     const actualDx = targetX - node.x;
     const actualDy = targetY - node.y;
-    
+
     node.x = targetX;
     node.y = targetY;
     const el = document.querySelector(`[data-node-id="${drag.nodeId}"]`);
     if (el) { el.style.left = node.x + 'px'; el.style.top = node.y + 'px'; }
-    
+
     // Also move sub-nodes relative to parent safely using frame delta
     if (node.type === 'category') {
       state.mindmapNodes.filter(n => n.parentId === node.id).forEach(sub => {
@@ -1268,7 +1268,7 @@ function updateMindmapLines() {
       const parent = state.mindmapNodes.find(n => n.id === node.parentId);
       if (!parent) continue;
       fx = parent.x + 90; fy = parent.y + 32;
-      tx = node.x + 80;   ty = node.y + 28;
+      tx = node.x + 80; ty = node.y + 28;
     } else {
       fx = cx; fy = cy; tx = node.x + 90; ty = node.y + 32;
     }
@@ -1285,13 +1285,15 @@ function mindmapNodesHTML() {
   ensureStyles();
   return state.mindmapNodes.map(node => {
     if (node.type === 'center') {
-      return `<div data-node-id="${node.id}" class="absolute flex flex-col items-center justify-center text-center p-6 cursor-grab hover:scale-105 active:scale-95 transition-transform duration-500 w-44 h-44 rounded-full bg-primary-container shadow-[0_20px_60px_-15px_rgba(74,100,83,0.4)] border-[6px] border-surface"
-        style="left:${node.x}px;top:${node.y}px;z-index:20;user-select:none">
-        <div class="bg-primary/10 p-3 rounded-2xl mb-2 flex items-center justify-center">
-          <span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings:'FILL' 1;">${node.icon}</span>
+      return `<div data-node-id="${node.id}" class="absolute cursor-grab"
+        style="left:${node.x}px;top:${node.y}px;z-index:20;user-select:none;width:176px;height:176px;">
+        <div class="w-full h-full flex flex-col items-center justify-center text-center p-6 rounded-full bg-primary-container shadow-[0_20px_60px_-15px_rgba(74,100,83,0.4)] border-[6px] border-surface transition-transform duration-300 hover:scale-105 active:scale-95">
+          <div class="bg-primary/10 p-3 rounded-2xl mb-2 flex items-center justify-center">
+            <span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings:'FILL' 1;">${node.icon}</span>
+          </div>
+          <h1 class="font-headline font-extrabold text-on-primary-container text-lg tracking-tight leading-tight">${escapeHtml(node.label)}</h1>
+          <p class="text-[9px] uppercase font-black tracking-[0.2em] text-primary/80 mt-1">${escapeHtml(node.sub)}</p>
         </div>
-        <h1 class="font-headline font-extrabold text-on-primary-container text-lg tracking-tight leading-tight">${escapeHtml(node.label)}</h1>
-        <p class="text-[9px] uppercase font-black tracking-[0.2em] text-primary/80 mt-1">${escapeHtml(node.sub)}</p>
       </div>`;
     }
 
@@ -1299,7 +1301,7 @@ function mindmapNodesHTML() {
 
     // Category node
     if (node.type === 'category') {
-      return `<div data-node-id="${node.id}" class="absolute cursor-pointer floating-node"
+      return `<div data-node-id="${node.id}" class="absolute cursor-pointer"
         style="left:${node.x}px;top:${node.y}px;z-index:10;user-select:none">
         <div class="glass-panel p-5 rounded-2xl shadow-xl border border-outline-variant/10 w-48 hover:-translate-y-1 hover:shadow-2xl transition-all duration-300">
           <div class="flex items-center gap-3 mb-4">
@@ -1319,9 +1321,9 @@ function mindmapNodesHTML() {
     // Sub-skill node (small)
     if (node.type === 'subcategory') {
       const isSelected = state.selectedSkillKey === node.skillKey;
-      return `<div data-node-id="${node.id}" class="absolute sub-node cursor-pointer hover:-translate-y-0.5 transition-all"
+      return `<div data-node-id="${node.id}" class="absolute sub-node cursor-pointer group"
         style="left:${node.x}px;top:${node.y}px;width:170px;z-index:15;user-select:none">
-        <div class="glass-panel py-2 px-3 flex items-center gap-2.5 rounded-xl border shadow-sm transition-all duration-300 ${isSelected ? 'border-primary ring-2 ring-primary/20 bg-white/90 shadow-md' : 'border-outline-variant/15 hover:border-outline-variant/30 hover:shadow-md'}">
+        <div class="glass-panel py-2 px-3 flex items-center gap-2.5 rounded-xl border shadow-sm transition-all duration-200 group-hover:-translate-y-0.5 ${isSelected ? 'border-primary ring-2 ring-primary/20 bg-surface-container-lowest/90 shadow-md' : 'border-outline-variant/15 group-hover:border-outline-variant/30 group-hover:shadow-md'}">
           <div class="w-6 h-6 rounded-lg flex items-center justify-center shrink-0" style="background:${m.bg}; color:${m.border};">
             ${node.emoji || `<span class="material-symbols-outlined text-[13px]">${node.icon}</span>`}
           </div>
@@ -1335,9 +1337,9 @@ function mindmapNodesHTML() {
 
     // Presence node
     const presenceActive = node.type === 'presence' && (Date.now() - (node.presenceEntry?.ts || 0)) < 30000;
-    return `<div data-node-id="${node.id}" class="absolute cursor-grab hover:-translate-y-1 transition-transform floating-node-delayed"
+    return `<div data-node-id="${node.id}" class="absolute cursor-grab group"
       style="left:${node.x}px;top:${node.y}px;z-index:10;user-select:none">
-      <div class="glass-panel p-5 rounded-2xl shadow-xl border border-outline-variant/10 w-48 transition-all duration-300">
+      <div class="glass-panel p-5 rounded-2xl shadow-xl border border-outline-variant/10 w-48 transition-all duration-300 group-hover:-translate-y-0.5">
         <div class="flex items-center gap-3 mb-3">
           <div class="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm relative" style="background:${m.bg}; color:${m.border};">
             <span class="material-symbols-outlined text-lg">${node.icon}</span>
@@ -1357,77 +1359,95 @@ function mindmapNodesHTML() {
 // ── View renderers ────────────────────────────────────────────────────────────
 function renderChat() {
   const isEmpty = state.messages.length === 0;
+
   return `
-    <section class="flex-1 flex flex-col items-center justify-start pt-24 pb-32 px-6 overflow-y-auto" id="messages-scroll">
-      <div class="max-w-4xl w-full flex flex-col items-center space-y-12">
+    <!-- Workspace Body -->
+    <div class="flex-1 flex flex-col items-center ${isEmpty ? 'justify-center' : 'justify-start pt-8 overflow-y-auto'} px-6 max-w-4xl mx-auto w-full pb-32 relative anim-slide-down" id="messages-scroll">
+      
+      <!-- Background Layering Effect -->
+      <div class="absolute inset-0 -z-10 flex items-center justify-center opacity-40 pointer-events-none">
+        <div class="w-[600px] h-[600px] bg-primary/5 rounded-full blur-[100px]"></div>
+      </div>
+
+      <div class="w-full flex flex-col ${isEmpty ? 'items-center' : ''}">
         ${isEmpty ? `
-          <div class="text-center space-y-3 mt-12 w-full animate-fade-in" id="welcome-bento">
-            <h2 class="font-headline text-on-surface font-extrabold text-5xl tracking-tight">Good evening</h2>
-            <p class="text-on-surface-variant text-lg font-body opacity-80 max-w-lg mx-auto">Your strategic assistant is ready to help cultivate your next big idea.</p>
+          <!-- Prominent Message Input Area -->
+          <div class="w-full max-w-3xl group transition-all anim-slide-up" id="welcome-input">
+            <!-- Central Welcome Text -->
+            <div class="text-center mb-12 space-y-4">
+              <h1 class="text-6xl md:text-7xl font-serif-elegant tracking-tight text-on-surface leading-tight">
+                  Good evening.
+              </h1>
+              <p class="text-on-surface-variant text-lg font-light tracking-wide max-w-lg mx-auto leading-relaxed">
+                  Your workspace is quiet and prepared. What shall we cultivate today?
+              </p>
+            </div>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mt-10">
-              <button onclick="window._sendPrompt('Draft a proposal for the Arboretum project.')" class="flex items-start gap-4 p-6 bg-surface-container-lowest hover:bg-surface-container transition-all text-left rounded-xl group relative overflow-hidden border border-black/5 shadow-sm">
-                <div class="p-3 bg-secondary-container rounded-lg text-on-secondary-container shrink-0 flex items-center justify-center">
-                  <span class="material-symbols-outlined text-2xl">article</span>
+            <div class="relative surface-container-lowest glass-panel rounded-2xl shadow-[0_24px_48px_-12px_rgba(41,53,51,0.08)] border border-outline-variant/10 p-1">
+              <div class="flex items-end gap-3 p-4">
+                <div class="flex-1 min-h-[56px] py-2">
+                  <textarea id="chat-input-hero" class="w-full bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant/60 resize-none py-1 text-lg font-body leading-relaxed" placeholder="Enter your thoughts here..." rows="1" autofocus></textarea>
                 </div>
-                <div class="flex-1">
-                  <h4 class="font-headline font-bold text-on-surface">Draft a proposal</h4>
-                  <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">Generate a structured executive summary for the Arboretum project.</p>
+                <button id="send-btn-hero" class="flex items-center justify-center w-12 h-12 bg-primary text-on-primary rounded-xl shadow-lg transition-transform active:scale-95 group-hover:shadow-primary/20 scale-98-on-click">
+                  <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">send</span>
+                </button>
+              </div>
+              <div class="flex items-center px-4 py-2 bg-surface-container-low/30 rounded-b-2xl border-t border-outline-variant/5">
+                <div class="flex gap-4">
+                  <button class="flex items-center gap-2 text-xs font-label uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors">
+                    <span class="material-symbols-outlined text-sm">attach_file</span>
+                    <span>Attach</span>
+                  </button>
                 </div>
-                <span class="material-symbols-outlined text-outline-variant opacity-0 group-hover:opacity-100 transition-opacity self-center shrink-0">arrow_forward</span>
-              </button>
-              <button onclick="window._sendPrompt('Break down the internal neural architecture of our current agentic flow.')" class="flex items-start gap-4 p-6 bg-surface-container-lowest hover:bg-surface-container transition-all text-left rounded-xl group relative overflow-hidden border border-black/5 shadow-sm">
-                <div class="p-3 bg-primary-container rounded-lg text-on-primary-container shrink-0 flex items-center justify-center">
-                  <span class="material-symbols-outlined text-2xl">hub</span>
-                </div>
-                <div class="flex-1">
-                  <h4 class="font-headline font-bold text-on-surface">Analyze system logic</h4>
-                  <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">Break down the internal neural architecture of our current agentic flow.</p>
-                </div>
-                <span class="material-symbols-outlined text-outline-variant opacity-0 group-hover:opacity-100 transition-opacity self-center shrink-0">arrow_forward</span>
-              </button>
-              <button onclick="window._sendPrompt('Research competitor mapping in botanical-themed design systems.')" class="flex items-start gap-4 p-6 bg-surface-container-lowest hover:bg-surface-container transition-all text-left rounded-xl group relative overflow-hidden border border-black/5 shadow-sm">
-                <div class="p-3 bg-tertiary-container rounded-lg text-on-tertiary-container shrink-0 flex items-center justify-center">
-                  <span class="material-symbols-outlined text-2xl">insights</span>
-                </div>
-                <div class="flex-1">
-                  <h4 class="font-headline font-bold text-on-surface">Competitor mapping</h4>
-                  <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">Research and compare botanical-themed design systems in AI tech.</p>
-                </div>
-                <span class="material-symbols-outlined text-outline-variant opacity-0 group-hover:opacity-100 transition-opacity self-center shrink-0">arrow_forward</span>
-              </button>
-              <button onclick="window._sendPrompt('Review the latest strategy nodes and suggest expansion paths.')" class="flex items-start gap-4 p-6 bg-surface-container-lowest hover:bg-surface-container transition-all text-left rounded-xl group relative overflow-hidden border border-black/5 shadow-sm">
-                <div class="p-3 bg-secondary-container rounded-lg text-on-secondary-container shrink-0 flex items-center justify-center">
-                  <span class="material-symbols-outlined text-2xl">auto_awesome_motion</span>
-                </div>
-                <div class="flex-1">
-                  <h4 class="font-headline font-bold text-on-surface">Iterate on Mindmap</h4>
-                  <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">Review the latest strategy nodes and suggest expansion paths.</p>
-                </div>
-                <span class="material-symbols-outlined text-outline-variant opacity-0 group-hover:opacity-100 transition-opacity self-center shrink-0">arrow_forward</span>
-              </button>
+              </div>
+            </div>
+            
+            <!-- Inspiration Section -->
+            <div class="mt-16 w-full text-center anim-slide-up" style="animation-delay: 0.1s;">
+              <h3 class="text-xs font-label uppercase tracking-[0.2em] text-outline-variant mb-6">Inspiration to explore</h3>
+              <div class="flex flex-wrap justify-center gap-x-8 gap-y-4">
+                <a class="text-sm font-medium text-on-surface-variant hover:text-primary transition-all flex items-center gap-1 group/btn cursor-pointer" onclick="window._sendPrompt('Synthesize quarterly reports')">
+                  <span>Synthesize quarterly reports</span>
+                  <span class="material-symbols-outlined text-xs opacity-0 -translate-x-2 group-hover/btn:opacity-100 group-hover/btn:translate-x-0 transition-all">arrow_forward</span>
+                </a>
+                <a class="text-sm font-medium text-on-surface-variant hover:text-primary transition-all flex items-center gap-1 group/btn cursor-pointer" onclick="window._sendPrompt('Draft the project manifesto')">
+                  <span>Draft the project manifesto</span>
+                  <span class="material-symbols-outlined text-xs opacity-0 -translate-x-2 group-hover/btn:opacity-100 group-hover/btn:translate-x-0 transition-all">arrow_forward</span>
+                </a>
+                <a class="text-sm font-medium text-on-surface-variant hover:text-primary transition-all flex items-center gap-1 group/btn cursor-pointer" onclick="window._sendPrompt('Review architectural decisions')">
+                  <span>Review architectural decisions</span>
+                  <span class="material-symbols-outlined text-xs opacity-0 -translate-x-2 group-hover/btn:opacity-100 group-hover/btn:translate-x-0 transition-all">arrow_forward</span>
+                </a>
+              </div>
             </div>
           </div>
         ` : ''}
+
         <div class="w-full space-y-8" id="messages" style="${isEmpty ? 'display:none;' : ''}"></div>
       </div>
-    </section>
-    
-    <div class="absolute bottom-0 left-0 right-0 py-8 px-4 md:px-8 flex justify-center pointer-events-none z-20">
-      <div class="max-w-3xl w-full pointer-events-auto">
-        <div class="glass-panel p-2 rounded-2xl shadow-[0_20px_40px_-4px_rgba(41,53,51,0.06)] flex items-center gap-2 border border-outline-variant/10 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10 transition-all bg-surface-container-lowest/90">
-          <button class="p-3 text-on-surface-variant hover:bg-surface-container rounded-xl transition-colors flex items-center justify-center">
-            <span class="material-symbols-outlined">attach_file</span>
-          </button>
-          <input id="chat-input" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant py-3 px-2 font-body text-base" placeholder="Message Arboretum..." type="text" autocomplete="off" />
-          <button id="send-btn" class="p-3 bg-[#4a6453] text-white rounded-xl flex items-center justify-center shadow-sm hover:opacity-90 transition-all scale-98-on-click">
-            <span class="material-symbols-outlined">send</span>
-          </button>
+
+      ${!isEmpty ? `
+      <!-- Fixed Bottom Input Bar for Active Chat -->
+      <div class="fixed bottom-0 left-0 right-0 py-6 px-4 md:px-8 flex justify-center pointer-events-none z-20" style="padding-left: 280px;">
+        <div class="max-w-3xl w-full pointer-events-auto">
+          <div class="glass-panel p-2 rounded-2xl shadow-[0_20px_40px_-4px_rgba(41,53,51,0.06)] flex items-center gap-2 border border-outline-variant/10 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10 transition-all bg-surface-container-lowest/90">
+            <button class="p-3 text-on-surface-variant hover:bg-surface-container rounded-xl transition-colors flex items-center justify-center">
+              <span class="material-symbols-outlined">attach_file</span>
+            </button>
+            <input id="chat-input" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant py-3 px-2 font-body text-base" placeholder="Message Arboretum..." type="text" autocomplete="off" />
+            <button id="send-btn" class="p-3 bg-primary text-on-primary rounded-xl flex items-center justify-center shadow-sm hover:opacity-90 transition-all scale-98-on-click">
+              <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">send</span>
+            </button>
+          </div>
         </div>
-        <div class="mt-4 text-center">
-          <p class="text-[10px] text-outline-variant uppercase tracking-[0.1em] font-label">
-            AI-generated responses can sometimes be inaccurate. Please verify critical information.
-          </p>
+      </div>
+      ` : ''}
+
+      <!-- Subtle Decorative Element -->
+      <div class="absolute bottom-6 right-8 pointer-events-none hidden lg:block ${!isEmpty ? 'fixed bottom-4' : ''}">
+        <div class="flex items-center gap-3 opacity-30 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-700">
+          <span class="text-[10px] uppercase tracking-widest font-label text-on-surface-variant">Secure Workspace Enclave</span>
+          <div class="w-1.5 h-1.5 rounded-full bg-[#506A58]"></div>
         </div>
       </div>
     </div>`;
@@ -1437,8 +1457,8 @@ function renderMindmap() {
   const catCount = state.mindmapNodes.filter(n => n.type === 'category').length;
   const presCount = state.mindmapNodes.filter(n => n.type === 'presence').length;
   return `
-    <div class="flex-1 relative overflow-hidden bg-surface-container-low mindmap-grid min-h-0" id="mindmap-canvas">
-      <div class="absolute top-6 left-6 z-10 pointer-events-none">
+    <div class="flex-1 relative overflow-hidden bg-surface-container-low mindmap-grid min-h-0 anim-slide-up" id="mindmap-canvas">
+      <div class="absolute top-24 left-8 z-10 pointer-events-none">
         <div class="text-xl font-bold tracking-tight text-on-surface">Skills & Agents</div>
         <div class="flex items-center gap-3 mt-1">
           <span class="w-2 h-2 rounded-full ${state.connected ? 'bg-emerald-500' : 'bg-red-400'}"></span>
@@ -1507,10 +1527,9 @@ window._toggleSidebar = () => {
 
 window._sendPrompt = (text) => {
   if (text && state.messages.length === 0) {
-    document.getElementById('messages').style.display = 'block';
-    const bento = document.getElementById('welcome-bento');
-    if (bento) bento.style.display = 'none';
     sendMessage(text);
+    render();
+    setTimeout(() => document.getElementById('chat-input')?.focus(), 50);
   } else if (text) {
     sendMessage(text);
   }
@@ -1520,73 +1539,107 @@ function render() {
   stopPresencePoll();
   const app = document.getElementById('app');
   if (!app) return;
-  
+
   app.innerHTML = `
-    <!-- Sidebar -->
-    <aside class="h-screen w-64 border-r border-outline-variant/10 bg-[#eff5f2] dark:bg-slate-950 flex flex-col p-4 space-y-2 shrink-0 relative z-40 ${state.sidebarCollapsed ? 'collapsed' : ''}" id="sidebar">
-      <div class="sidebar-header-container mb-6 px-2 py-2 flex items-center justify-between">
-        <div class="sidebar-content-full overflow-hidden flex items-center gap-3">
-          <div class="h-9 w-9 shrink-0 rounded-xl bg-primary flex items-center justify-center text-on-primary shadow-sm">
-            <svg fill="currentColor" height="20" viewBox="0 0 24 24" width="20"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"></path></svg>
+    <!-- SideNavBar -->
+    <aside class="hidden md:flex flex-col h-full w-64 left-0 sticky bg-[#eff5f2] dark:bg-[#1e2621] pb-6 pt-6 shadow-[24px_0_40px_-4px_rgba(41,53,51,0.06)] z-20 overflow-hidden ${state.sidebarCollapsed ? 'collapsed' : ''}" id="sidebar">
+      <div class="flex items-center justify-between mb-8 px-6 sidebar-header-container">
+        <div class="flex items-center space-x-3 sidebar-content-full">
+          <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary shadow-sm shrink-0">
+            <span class="material-symbols-outlined text-sm">filter_vintage</span>
           </div>
           <div class="sidebar-header-title">
-            <h1 class="text-[#3e5746] font-bold text-[16px] font-headline truncate">Arboretum</h1>
-            <p class="text-on-surface-variant text-[10px] font-label tracking-widest uppercase mt-0.5 opacity-60 truncate">Active Session</p>
+            <h2 class="text-lg font-bold text-[#506A58] font-headline tracking-tight">Sessions</h2>
+            <p class="text-[10px] uppercase tracking-widest text-[#506A58]/60">Management</p>
           </div>
         </div>
-        <button class="p-2 hover:bg-surface-container rounded-lg text-on-surface-variant transition-colors flex items-center justify-center" onclick="window._toggleSidebar()" title="Toggle Sidebar">
+        <button class="p-2 -mr-2 hover:bg-[#fbfdfc]/60 dark:hover:bg-[#2c3630] rounded-lg text-on-surface-variant transition-colors flex items-center justify-center shrink-0" onclick="window._toggleSidebar()" title="Toggle Sidebar">
           <span class="material-symbols-outlined text-xl" id="toggle-icon">${state.sidebarCollapsed ? 'menu' : 'menu_open'}</span>
         </button>
       </div>
       
-      <button onclick="window._newSession()" class="new-chat-btn mb-6 w-full flex items-center justify-start gap-3 py-2.5 px-3 bg-[#4a6453] text-white rounded-lg font-medium shadow-sm hover:bg-[#3f5847] transition-all scale-98-on-click">
-        <span class="material-symbols-outlined text-xl">add</span>
-        <span class="font-label text-sm new-chat-btn-text">New Chat</span>
-      </button>
-      
-      <nav class="flex-1 space-y-1 overflow-y-auto">
-        <p class="sidebar-item-text text-[10px] font-bold text-outline-variant uppercase tracking-widest px-3 mb-2 opacity-70">Recent</p>
-        <div id="sidebar-panel-content" class="space-y-0.5"></div>
-      </nav>
-      
-      <div class="pt-4 mt-4 border-t border-outline-variant/20 space-y-1">
-        <a class="sidebar-item-padding flex items-center gap-3 text-on-surface-variant dark:text-slate-400 py-2 px-3 hover:bg-white/50 dark:hover:bg-slate-900 rounded-lg transition-all duration-200 cursor-pointer" onclick="window._openHelp()">
-          <span class="material-symbols-outlined shrink-0 text-[18px]">settings</span>
-          <span class="font-inter text-sm sidebar-item-text">Settings</span>
-        </a>
-        <a class="sidebar-item-padding flex items-center gap-3 text-on-surface-variant dark:text-slate-400 py-2 px-3 hover:bg-white/50 dark:hover:bg-slate-900 rounded-lg transition-all duration-200 cursor-pointer" onclick="window.__nordicGw.connect()">
-          <div class="w-2.5 h-2.5 rounded-full ${state.connected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-400 animate-pulse'} shrink-0 ml-1"></div>
-          <span class="font-inter text-sm sidebar-item-text ml-1">${state.connected ? 'Connected' : 'Offline'}</span>
-        </a>
+      <div class="px-6 space-y-4 flex flex-col h-full">
+        <button onclick="window._newSession()" class="new-chat-btn w-full py-3 px-4 bg-primary text-on-primary rounded-lg font-medium flex items-center justify-center gap-2 hover:opacity-90 transition-all duration-300 shadow-sm scale-98-on-click shrink-0">
+          <span class="material-symbols-outlined text-lg">add</span>
+          <span class="new-chat-btn-text">New Chat</span>
+        </button>
+        
+        <nav class="flex-1 space-y-2 overflow-y-auto" id="sidebar-panel-content">
+        </nav>
+        
+        <div class="pt-6 border-t border-outline-variant/10 space-y-2 shrink-0">
+          <a class="sidebar-item-padding flex items-center gap-3 px-4 py-2 text-[#506A58]/70 dark:text-[#a8b5b2] hover:bg-[#fbfdfc]/60 rounded-lg transition-all cursor-pointer" onclick="window._openHelp()">
+            <span class="material-symbols-outlined shrink-0">settings</span>
+            <span class="text-sm sidebar-item-text">Settings</span>
+          </a>
+          <a class="sidebar-item-padding flex items-center gap-3 px-4 py-2 text-[#506A58]/70 dark:text-[#a8b5b2] hover:bg-[#fbfdfc]/60 rounded-lg transition-all cursor-pointer" onclick="window.__nordicGw.connect()">
+            <div class="w-2.5 h-2.5 rounded-full ${state.connected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-400 animate-pulse'} overflow-hidden shrink-0 ml-1"></div>
+            <span class="text-sm font-medium ml-1 sidebar-item-text">${state.connected ? 'Connected' : 'Offline'}</span>
+          </a>
+        </div>
       </div>
     </aside>
 
-    <main class="flex-1 flex flex-col min-w-0 relative h-full">
-      <header class="absolute top-0 right-0 left-0 z-30 bg-surface/80 backdrop-blur-md h-16 flex justify-center items-center px-6 transition-all duration-300 border-b border-outline-variant/5">
-        <nav class="flex items-center gap-2">
-          <a href="#chat" class="${state.view === 'chat' ? 'text-[#4a6453] dark:text-[#ffffff] bg-[#cdead3]/30 px-6 py-1.5 rounded-full font-manrope text-sm font-bold tracking-tight transition-all' : 'text-slate-500 dark:text-slate-400 hover:text-[#4a6453] px-6 py-1.5 rounded-full font-manrope text-sm font-semibold tracking-tight transition-all'}">Chat</a>
-          <a href="#mindmap" class="${state.view === 'mindmap' ? 'text-[#4a6453] dark:text-[#ffffff] bg-[#cdead3]/30 px-6 py-1.5 rounded-full font-manrope text-sm font-bold tracking-tight transition-all' : 'text-slate-500 dark:text-slate-400 hover:text-[#4a6453] px-6 py-1.5 rounded-full font-manrope text-sm font-semibold tracking-tight transition-all'}">Mindmap</a>
-        </nav>
+    <!-- Main Content Canvas -->
+    <main class="flex-1 flex flex-col relative overflow-hidden bg-surface">
+      <!-- TopAppBar -->
+      <header class="w-full top-0 sticky bg-[#eff5f2] dark:bg-[#222a25] transition-colors duration-300 z-30">
+        <div class="flex justify-between items-center px-8 py-4 w-full max-w-screen-2xl mx-auto relative">
+          <div class="flex items-center">
+            <span class="text-xl font-bold text-[#506A58] dark:text-[#eff5f2] font-headline tracking-tighter">&nbsp;</span>
+          </div>
+          <!-- Centered Navigation -->
+          <nav class="hidden md:flex items-center gap-10 absolute left-1/2 -translate-x-1/2">
+            <a href="#chat" class="text-lg font-headline tracking-tighter font-semibold transition-all ${state.view === 'chat' ? 'text-[#506A58] dark:text-[#eff5f2] border-b-2 border-[#506A58] pb-1' : 'text-[#a8b5b2] dark:text-[#506a58] hover:text-[#506A58]'}">Chat</a>
+            <a href="#mindmap" class="text-lg font-headline tracking-tighter font-semibold transition-all ${state.view === 'mindmap' ? 'text-[#506A58] dark:text-[#eff5f2] border-b-2 border-[#506A58] pb-1' : 'text-[#a8b5b2] dark:text-[#506a58] hover:text-[#506A58]'}">Mindmap</a>
+          </nav>
+          <div class="flex items-center gap-4">
+            <button class="p-2 text-[#506A58] hover:bg-[#eff5f2]/50 dark:hover:bg-[#2c3630] rounded-full transition-all scale-95 duration-200 ease-out">
+              <span class="material-symbols-outlined">search</span>
+            </button>
+            <button class="p-2 text-[#506A58] hover:bg-[#eff5f2]/50 dark:hover:bg-[#2c3630] rounded-full transition-all scale-95 duration-200 ease-out">
+              <span class="material-symbols-outlined">more_vert</span>
+            </button>
+          </div>
+        </div>
       </header>
+
+      <!-- Workspace Body -->
       ${state.view === 'mindmap' ? renderMindmap() : renderChat()}
     </main>
+
+    <!-- Mobile Navigation -->
+    <nav class="md:hidden fixed bottom-0 w-full bg-[#eff5f2] dark:bg-[#222a25] px-6 py-4 flex justify-between items-center z-50">
+      <a class="flex flex-col items-center gap-1 text-[#506A58]" href="#chat">
+        <span class="material-symbols-outlined">chat_bubble</span>
+        <span class="text-[10px] font-label font-bold">Chat</span>
+      </a>
+      <a class="flex flex-col items-center gap-1 text-[#a8b5b2]" href="#mindmap">
+        <span class="material-symbols-outlined">neurology</span>
+        <span class="text-[10px] font-label">Mindmap</span>
+      </a>
+    </nav>
   `;
 
-  const input = document.getElementById('chat-input');
-  const sendBtn = document.getElementById('send-btn');
-  if (input && sendBtn) {
-    const doSend = () => { 
-      const t = input.value.trim(); 
-      if (t) { 
-        window._sendPrompt(t); 
-        input.value = ''; 
-      } 
-    };
-    sendBtn.onclick = doSend;
-    input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
-  }
+  ['chat-input', 'chat-input-hero'].forEach((id, idx) => {
+    const input = document.getElementById(id);
+    const sendBtn = document.getElementById(idx === 0 ? 'send-btn' : 'send-btn-hero');
+    if (input && sendBtn) {
+      const doSend = () => {
+        const t = input.value.trim();
+        if (t) {
+          window._sendPrompt(t);
+          input.value = '';
+          input.style.height = 'auto';
+        }
+      };
+      sendBtn.onclick = doSend;
+      input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
+      input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; });
+    }
+  });
 
-  renderSidebarPanel(); 
+  renderSidebarPanel();
   if (state.view === 'chat') renderMessages();
   if (state.view === 'mindmap') requestAnimationFrame(() => { initMindmap(); updateMindmapLines(); });
 }
@@ -1602,7 +1655,7 @@ window._newSession = () => {
   showToast('New session started');
 };
 window._openHistory = () => openHistory();
-window._openHelp    = () => openHelp();
+window._openHelp = () => openHelp();
 window._selectSession = (key) => { state.sessionKey = key; state.messages = []; state.sidebarPanel = null; render(); if (state.connected) loadHistory(); };
 window._toggleMonitor = () => { state.monitorOpen = !state.monitorOpen; if (state.monitorOpen) loadPresence(); render(); };
 window._closeSkillPanel = () => { state.selectedSkillKey = null; document.getElementById('skill-panel')?.remove(); };
@@ -1645,8 +1698,8 @@ window._showSkillModal = () => {
   if (existing) { existing.remove(); return; }
 
   const CAT_COLORS = {
-    search:'#3b82f6', code:'#6b7280', comms:'#6366f1', data:'#f59e0b',
-    ai:'#8b5cf6', productivity:'#0d9488', media:'#ec4899', files:'#d97706', default:'#496250'
+    search: '#3b82f6', code: '#6b7280', comms: '#6366f1', data: '#f59e0b',
+    ai: '#8b5cf6', productivity: '#0d9488', media: '#ec4899', files: '#d97706', default: '#496250'
   };
 
   const modal = document.createElement('div');
@@ -1914,3 +1967,18 @@ window._resetMindmap = () => {
 };
 
 render();
+
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    const splash = document.getElementById('splash-screen');
+    const app = document.getElementById('app');
+    if (splash) {
+      splash.style.opacity = '0';
+      splash.style.pointerEvents = 'none';
+      setTimeout(() => splash.remove(), 1000);
+    }
+    if (app) {
+      app.classList.remove('opacity-0');
+    }
+  }, 2000);
+});
