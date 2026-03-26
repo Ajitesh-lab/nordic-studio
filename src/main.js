@@ -1088,6 +1088,189 @@ async function openHistory() {
 
 function openHelp() { state.sidebarPanel = state.sidebarPanel === 'help' ? null : 'help'; renderSidebarPanel(); }
 
+function openSettings() {
+  // Render a settings overlay instead of sidebar panel
+  let overlay = document.getElementById('settings-overlay');
+  if (overlay) { overlay.remove(); return; }
+
+  const provider  = localStorage.getItem('biome-provider') || 'gemini';
+  const apiKey    = localStorage.getItem('biome-api-key')   || '';
+  const modelType = localStorage.getItem('biome-model-type') || 'cloud';
+
+  overlay = document.createElement('div');
+  overlay.id = 'settings-overlay';
+  overlay.className = 'fixed inset-0 z-50 flex items-center justify-center';
+  overlay.style.background = 'rgba(0,0,0,0.4)';
+  overlay.style.backdropFilter = 'blur(4px)';
+
+  overlay.innerHTML = `
+    <div class="w-full max-w-md rounded-2xl shadow-2xl p-6 relative" style="background:#f7faf8;max-height:90vh;overflow-y:auto">
+      <button id="settings-close" class="absolute top-4 right-4 w-8 h-8 rounded-lg flex items-center justify-center hover:bg-black/5 transition-colors">
+        <span class="material-symbols-outlined text-xl" style="color:#55625f">close</span>
+      </button>
+
+      <h2 class="font-headline text-xl font-extrabold tracking-tight mb-1" style="color:#293533">Settings</h2>
+      <p class="text-xs mb-5" style="color:#717d7b">Manage your Biome configuration</p>
+
+      <!-- Provider -->
+      <div class="mb-4">
+        <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">AI Provider</label>
+        <select id="set-provider" class="w-full px-4 py-2.5 rounded-xl border text-sm outline-none" style="background:#eff5f2;border-color:#a8b5b2;color:#293533">
+          <option value="gemini" ${provider === 'gemini' ? 'selected' : ''}>Google Gemini</option>
+          <option value="openai" ${provider === 'openai' ? 'selected' : ''}>OpenAI</option>
+          <option value="ollama" ${provider === 'ollama' ? 'selected' : ''}>Ollama (local)</option>
+          <option value="plan"   ${provider === 'plan'   ? 'selected' : ''}>Biome Plan</option>
+        </select>
+      </div>
+
+      <!-- API Key -->
+      <div id="set-apikey-section" class="mb-4" ${provider === 'ollama' || provider === 'plan' ? 'style="display:none"' : ''}>
+        <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">API Key</label>
+        <div class="flex gap-2">
+          <input id="set-apikey" type="password" value="${apiKey}" placeholder="Paste your API key"
+            class="flex-1 px-4 py-2.5 rounded-xl border text-sm outline-none font-mono" style="background:#eff5f2;border-color:#a8b5b2;color:#293533" />
+          <button id="set-apikey-toggle" class="px-3 py-2 rounded-xl border text-xs" style="background:#eff5f2;border-color:#a8b5b2;color:#55625f">Show</button>
+        </div>
+      </div>
+
+      <!-- Custom Data Sources -->
+      <div class="mb-4">
+        <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">Custom Data Sources</label>
+        <div id="set-sources" class="space-y-2 mb-2"></div>
+        <div class="flex gap-2">
+          <input id="set-new-source" type="url" placeholder="https://example.com/data"
+            class="flex-1 px-3 py-2 rounded-xl border text-sm outline-none" style="background:#eff5f2;border-color:#a8b5b2;color:#293533" />
+          <button id="set-add-source" class="px-3 py-2 rounded-xl text-xs font-semibold" style="background:#4a6453;color:#e2ffe8">Add</button>
+        </div>
+      </div>
+
+      <!-- Gateway Status -->
+      <div class="mb-4">
+        <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">Gateway Status</label>
+        <div class="flex items-center gap-2 px-4 py-2.5 rounded-xl border" style="background:#eff5f2;border-color:#a8b5b2">
+          <div id="set-gw-dot" class="w-2 h-2 rounded-full" style="background:#a8b5b2"></div>
+          <span id="set-gw-status" class="text-sm" style="color:#293533">Checking…</span>
+          <button id="set-gw-restart" class="ml-auto text-xs px-2 py-1 rounded-lg" style="background:#4a6453;color:#e2ffe8">Restart</button>
+        </div>
+      </div>
+
+      <!-- Relay Status -->
+      <div class="mb-5">
+        <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">Browser Relay</label>
+        <div class="flex items-center gap-2 px-4 py-2.5 rounded-xl border" style="background:#eff5f2;border-color:#a8b5b2">
+          <div id="set-relay-dot" class="w-2 h-2 rounded-full" style="background:#a8b5b2"></div>
+          <span id="set-relay-status" class="text-sm" style="color:#293533">Checking…</span>
+        </div>
+      </div>
+
+      <!-- Save -->
+      <button id="set-save" class="w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-[0.98] hover:opacity-90" style="background:#4a6453;color:#e2ffe8">
+        Save Changes
+      </button>
+
+      <p id="set-saved-msg" class="text-xs text-center mt-2 hidden" style="color:#4a6453">Saved ✓</p>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Close
+  document.getElementById('settings-close').onclick = () => overlay.remove();
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+  // Provider toggle
+  const providerEl = document.getElementById('set-provider');
+  const apiSection = document.getElementById('set-apikey-section');
+  providerEl.onchange = () => {
+    apiSection.style.display = ['ollama', 'plan'].includes(providerEl.value) ? 'none' : '';
+  };
+
+  // Show/hide key
+  const keyInput = document.getElementById('set-apikey');
+  document.getElementById('set-apikey-toggle').onclick = () => {
+    keyInput.type = keyInput.type === 'password' ? 'text' : 'password';
+  };
+
+  // Render custom sources
+  const renderSources = () => {
+    const container = document.getElementById('set-sources');
+    const sources = state.customSources || [];
+    container.innerHTML = sources.map((s, i) => `
+      <div class="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs" style="background:#eff5f2;border-color:#a8b5b2">
+        <span class="truncate flex-1 font-mono" style="color:#293533">${s.url}</span>
+        <button class="text-xs px-1.5 py-0.5 rounded" style="color:#9f403d" onclick="window._removeSource(${i})">✕</button>
+      </div>
+    `).join('');
+  };
+  renderSources();
+
+  window._removeSource = (i) => {
+    (state.customSources || []).splice(i, 1);
+    renderSources();
+  };
+
+  document.getElementById('set-add-source').onclick = () => {
+    const input = document.getElementById('set-new-source');
+    const url = input.value.trim();
+    if (!url) return;
+    if (!state.customSources) state.customSources = [];
+    state.customSources.push({ url });
+    input.value = '';
+    renderSources();
+  };
+
+  // Check gateway
+  const checkGw = async () => {
+    const dot = document.getElementById('set-gw-dot');
+    const status = document.getElementById('set-gw-status');
+    try {
+      const ws = new WebSocket('ws://127.0.0.1:18789');
+      await new Promise((ok, fail) => { ws.onopen = ok; ws.onerror = fail; setTimeout(fail, 3000); });
+      ws.close();
+      dot.style.background = '#4a6453';
+      status.textContent = 'Running on port 18789';
+    } catch {
+      dot.style.background = '#9f403d';
+      status.textContent = 'Not responding';
+    }
+  };
+  checkGw();
+
+  // Check relay
+  const checkRelay = async () => {
+    const dot = document.getElementById('set-relay-dot');
+    const status = document.getElementById('set-relay-status');
+    try {
+      const r = await fetch('http://127.0.0.1:9999/status', { signal: AbortSignal.timeout(3000) });
+      if (r.ok) { dot.style.background = '#4a6453'; status.textContent = 'Connected on port 9999'; }
+      else throw new Error();
+    } catch {
+      dot.style.background = '#9f403d';
+      status.textContent = 'Not connected';
+    }
+  };
+  checkRelay();
+
+  // Gateway restart
+  document.getElementById('set-gw-restart').onclick = async () => {
+    document.getElementById('set-gw-status').textContent = 'Restarting…';
+    if (window.webkit?.messageHandlers?.biomeInstall) {
+      window.webkit.messageHandlers.biomeInstall.postMessage({ action: 'restart_gateway' });
+    }
+    setTimeout(checkGw, 4000);
+  };
+
+  // Save
+  document.getElementById('set-save').onclick = () => {
+    localStorage.setItem('biome-provider', providerEl.value);
+    if (!['ollama', 'plan'].includes(providerEl.value)) {
+      localStorage.setItem('biome-api-key', keyInput.value.trim());
+    }
+    document.getElementById('set-saved-msg').classList.remove('hidden');
+    setTimeout(() => document.getElementById('set-saved-msg')?.classList.add('hidden'), 2000);
+  };
+}
+
 function renderSidebarPanel() {
   const el = document.getElementById('sidebar-panel-content');
   if (!el) return;
@@ -1568,7 +1751,7 @@ function render() {
         </nav>
         
         <div class="pt-6 border-t border-outline-variant/10 space-y-2 shrink-0">
-          <a class="sidebar-item-padding flex items-center gap-3 px-4 py-2 text-[#506A58]/70 dark:text-[#a8b5b2] hover:bg-[#fbfdfc]/60 rounded-lg transition-all cursor-pointer" onclick="window._openHelp()">
+          <a class="sidebar-item-padding flex items-center gap-3 px-4 py-2 text-[#506A58]/70 dark:text-[#a8b5b2] hover:bg-[#fbfdfc]/60 rounded-lg transition-all cursor-pointer" onclick="window._openSettings()">
             <span class="material-symbols-outlined shrink-0">settings</span>
             <span class="text-sm sidebar-item-text">Settings</span>
           </a>
@@ -1661,6 +1844,7 @@ window._newSession = () => {
 };
 window._openHistory = () => openHistory();
 window._openHelp = () => openHelp();
+window._openSettings = () => openSettings();
 // DEV ONLY — remove before release
 window._resetSetup = () => { Object.keys(localStorage).filter(k => k.startsWith('biome')).forEach(k => localStorage.removeItem(k)); location.reload(); };
 window._selectSession = (key) => { state.sessionKey = key; state.messages = []; state.sidebarPanel = null; render(); if (state.connected) loadHistory(); };
