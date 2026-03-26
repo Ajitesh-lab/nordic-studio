@@ -30,6 +30,7 @@ class SetupWizard {
     this.container  = container;
     this.onComplete = onComplete;
     this.step       = 1;
+    this.totalSteps = 5; // 1=key, 2=model, 3=config, 4=install, 5=done
     this.choices    = { modelType: '', provider: '', apiKey: '' };
   }
 
@@ -63,7 +64,8 @@ class SetupWizard {
         case 1: content.innerHTML = this._step1HTML(); this._wireStep1(); break;
         case 2: content.innerHTML = this._step2HTML(); this._wireStep2(); break;
         case 3: content.innerHTML = this._step3HTML(); this._wireStep3(); break;
-        case 4: content.innerHTML = this._step4HTML(); this._wireStep4(); break;
+        case 4: content.innerHTML = this._stepInstallHTML(); this._wireStepInstall(); break;
+        case 5: content.innerHTML = this._stepDoneHTML(); this._wireStepDone(); break;
       }
       requestAnimationFrame(() => {
         content.style.opacity = '1';
@@ -74,7 +76,7 @@ class SetupWizard {
 
   _updateDots() {
     const dots = document.getElementById('wz-dots');
-    dots.innerHTML = [1, 2, 3, 4].map(n => {
+    dots.innerHTML = [1, 2, 3, 4, 5].map(n => {
       if (n < this.step)  return `<div class="h-2 w-2 rounded-full bg-primary transition-all duration-300"></div>`;
       if (n === this.step) return `<div class="h-2 w-6 rounded-full bg-primary transition-all duration-300"></div>`;
       return `<div class="h-2 w-2 rounded-full transition-all duration-300" style="background:#a8b5b2"></div>`;
@@ -335,9 +337,123 @@ class SetupWizard {
     }
   }
 
-  // ── Step 4 — All set ─────────────────────────────────────────────────────────
+  // ── Step 4 — Installing ──────────────────────────────────────────────────────
 
-  _step4HTML() {
+  _stepInstallHTML() {
+    const steps = [
+      { id: 'xcode',    label: 'Developer tools' },
+      { id: 'homebrew', label: 'Homebrew' },
+      { id: 'node',     label: 'Node.js' },
+      { id: 'openclaw', label: 'OpenClaw' },
+      { id: 'config',   label: 'Configuration' },
+      { id: 'gateway',  label: 'AI Gateway' },
+    ];
+
+    return `
+      <div class="text-center mb-6">
+        <div class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style="background:#4a6453">
+          <span class="material-symbols-outlined text-3xl" style="color:#e2ffe8">downloading</span>
+        </div>
+        <h2 class="font-headline text-2xl font-extrabold tracking-tight mb-2" style="color:#293533">Setting up your agent</h2>
+        <p class="text-sm" style="color:#55625f">This might take a few minutes. Sit back.</p>
+      </div>
+      <div class="space-y-2.5">
+        ${steps.map(s => `
+          <div id="inst-${s.id}" class="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all" style="background:#eff5f2;border-color:#a8b5b2">
+            <div id="inst-${s.id}-icon" class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style="background:#a8b5b2">
+              <span class="material-symbols-outlined text-sm" style="color:white">circle</span>
+            </div>
+            <span class="text-sm font-medium" style="color:#293533">${s.label}</span>
+            <span id="inst-${s.id}-msg" class="text-xs ml-auto" style="color:#717d7b"></span>
+          </div>
+        `).join('')}
+      </div>
+      <div id="inst-error" class="hidden mt-4 p-3 rounded-xl text-sm" style="background:#fde8e8;color:#9f403d"></div>
+      <button id="inst-retry" class="hidden w-full mt-3 py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]" style="background:#4a6453;color:#e2ffe8">
+        <span class="material-symbols-outlined text-base">refresh</span> Retry
+      </button>`;
+  }
+
+  _wireStepInstall() {
+    // Listen for progress from Swift
+    window.__installProgress = (step, status, message) => {
+      const row  = document.getElementById(`inst-${step}`);
+      const icon = document.getElementById(`inst-${step}-icon`);
+      const msg  = document.getElementById(`inst-${step}-msg`);
+
+      if (row) {
+        if (status === 'running') {
+          icon.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin" style="color:white">progress_activity</span>';
+          icon.style.background = '#4a6453';
+          if (msg) msg.textContent = message || '';
+        } else if (status === 'done') {
+          icon.innerHTML = '<span class="material-symbols-outlined text-sm" style="color:white;font-variation-settings:\'FILL\' 1">check</span>';
+          icon.style.background = '#4a6453';
+          row.style.borderColor = '#4a6453';
+          row.style.background  = '#cdead3';
+          if (msg) msg.textContent = '';
+        } else if (status === 'error') {
+          icon.innerHTML = '<span class="material-symbols-outlined text-sm" style="color:white">close</span>';
+          icon.style.background = '#9f403d';
+          row.style.borderColor = '#9f403d';
+          if (msg) msg.textContent = '';
+          const errBox = document.getElementById('inst-error');
+          errBox.classList.remove('hidden');
+          errBox.textContent = message || 'Something went wrong';
+          document.getElementById('inst-retry').classList.remove('hidden');
+        } else if (status === 'skip') {
+          icon.innerHTML = '<span class="material-symbols-outlined text-sm" style="color:white;font-variation-settings:\'FILL\' 1">check</span>';
+          icon.style.background = '#4a6453';
+          row.style.borderColor = '#4a6453';
+          row.style.background  = '#cdead3';
+          if (msg) msg.textContent = 'Already installed';
+        }
+      }
+
+      // Complete — move to step 5
+      if (step === 'complete' && status === 'done') {
+        setTimeout(() => this._show(5), 800);
+      }
+    };
+
+    // Send install command to Swift (via WKScriptMessageHandler)
+    // Falls back to a simulated check if not in the native app
+    if (window.webkit?.messageHandlers?.biomeInstall) {
+      window.webkit.messageHandlers.biomeInstall.postMessage({
+        action: 'install',
+        provider:  this.choices.provider,
+        apiKey:    this.choices.apiKey,
+        modelType: this.choices.modelType,
+      });
+    } else {
+      // Browser fallback — simulate for dev/testing
+      console.log('[setup] Not in native app, simulating install...');
+      const fakeSteps = ['xcode', 'homebrew', 'node', 'openclaw', 'config', 'gateway', 'verify'];
+      let i = 0;
+      const tick = () => {
+        if (i >= fakeSteps.length) {
+          window.__installProgress('complete', 'done');
+          return;
+        }
+        window.__installProgress(fakeSteps[i], 'running', 'Checking...');
+        setTimeout(() => {
+          window.__installProgress(fakeSteps[i], 'done');
+          i++;
+          setTimeout(tick, 400);
+        }, 600);
+      };
+      tick();
+    }
+
+    // Retry button
+    document.getElementById('inst-retry')?.addEventListener('click', () => {
+      this._show(4);
+    });
+  }
+
+  // ── Step 5 — All set ─────────────────────────────────────────────────────────
+
+  _stepDoneHTML() {
     return `
       <div class="text-center">
         <div class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style="background:#cdead3">
@@ -365,7 +481,7 @@ class SetupWizard {
       </div>`;
   }
 
-  _wireStep4() {
+  _wireStepDone() {
     const messages = {
       cloud: "Your API key is saved and your agent is ready. I'm here whenever you need — just start typing.",
       local: "Your local model is running on your Mac. Everything stays private on your device. Let's get started.",
