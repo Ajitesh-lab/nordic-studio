@@ -22,6 +22,12 @@ function revealApp(delay = 2000) {
   }, delay);
 }
 
+// DEV ONLY — remove before release
+if (new URLSearchParams(location.search).has('reset')) {
+  Object.keys(localStorage).filter(k => k.startsWith('biome')).forEach(k => localStorage.removeItem(k));
+  history.replaceState(null, '', location.pathname);
+}
+
 async function start() {
   if (localStorage.getItem(SETUP_KEY)) {
     // Returning user — load main app and reveal after splash
