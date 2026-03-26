@@ -345,110 +345,149 @@ class SetupWizard {
       { id: 'homebrew', label: 'Homebrew' },
       { id: 'node',     label: 'Node.js' },
       { id: 'openclaw', label: 'OpenClaw' },
-      { id: 'config',   label: 'Configuration' },
+      { id: 'config',   label: 'Agent configuration' },
       { id: 'gateway',  label: 'AI Gateway' },
     ];
 
     return `
-      <div class="text-center mb-6">
-        <div class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style="background:#4a6453">
-          <span class="material-symbols-outlined text-3xl" style="color:#e2ffe8">downloading</span>
-        </div>
-        <h2 class="font-headline text-2xl font-extrabold tracking-tight mb-2" style="color:#293533">Setting up your agent</h2>
-        <p class="text-sm" style="color:#55625f">This might take a few minutes. Sit back.</p>
+      <div class="text-center mb-5">
+        <h2 class="font-headline text-2xl font-extrabold tracking-tight mb-1" style="color:#293533">Setting up your agent</h2>
+        <p class="text-sm" style="color:#55625f">Sit back — this usually takes 3–5 minutes.</p>
       </div>
-      <div class="space-y-2.5">
+
+      <!-- AI guide bubble -->
+      <div id="inst-ai" class="flex items-start gap-3 mb-4 px-4 py-3 rounded-xl border transition-all" style="background:#f0f7f3;border-color:#c8dfd2;min-height:56px">
+        <div class="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style="background:#4a6453">
+          <span class="material-symbols-outlined text-sm" style="color:#e2ffe8">filter_vintage</span>
+        </div>
+        <p id="inst-ai-text" class="text-sm leading-relaxed" style="color:#293533">Starting setup…</p>
+      </div>
+
+      <!-- Step rows -->
+      <div class="space-y-2">
         ${steps.map(s => `
-          <div id="inst-${s.id}" class="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all" style="background:#eff5f2;border-color:#a8b5b2">
-            <div id="inst-${s.id}-icon" class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style="background:#a8b5b2">
-              <span class="material-symbols-outlined text-sm" style="color:white">circle</span>
+          <div id="inst-${s.id}" class="flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all duration-300" style="background:#eff5f2;border-color:#a8b5b2">
+            <div id="inst-${s.id}-icon" class="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style="background:#a8b5b2">
+              <span class="material-symbols-outlined text-xs" style="color:white;font-size:12px">circle</span>
             </div>
             <span class="text-sm font-medium" style="color:#293533">${s.label}</span>
-            <span id="inst-${s.id}-msg" class="text-xs ml-auto" style="color:#717d7b"></span>
+            <span id="inst-${s.id}-sub" class="text-xs ml-auto" style="color:#717d7b"></span>
           </div>
         `).join('')}
       </div>
-      <div id="inst-error" class="hidden mt-4 p-3 rounded-xl text-sm" style="background:#fde8e8;color:#9f403d"></div>
+
+      <div id="inst-error" class="hidden mt-3 p-3 rounded-xl text-xs font-mono" style="background:#fde8e8;color:#9f403d;max-height:80px;overflow-y:auto"></div>
       <button id="inst-retry" class="hidden w-full mt-3 py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]" style="background:#4a6453;color:#e2ffe8">
         <span class="material-symbols-outlined text-base">refresh</span> Retry
       </button>`;
   }
 
   _wireStepInstall() {
-    // Listen for progress from Swift
-    window.__installProgress = (step, status, message) => {
-      const row  = document.getElementById(`inst-${step}`);
-      const icon = document.getElementById(`inst-${step}-icon`);
-      const msg  = document.getElementById(`inst-${step}-msg`);
+    // ── AI guide bubble ────────────────────────────────────────────────────────
+    window.__installAI = (message) => {
+      const el = document.getElementById('inst-ai-text');
+      if (!el) return;
+      // Typewrite effect
+      el.textContent = '';
+      let i = 0;
+      const type = () => {
+        if (i < message.length) { el.textContent += message[i++]; setTimeout(type, 18); }
+      };
+      type();
+    };
 
-      if (row) {
-        if (status === 'running') {
-          icon.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin" style="color:white">progress_activity</span>';
-          icon.style.background = '#4a6453';
-          if (msg) msg.textContent = message || '';
-        } else if (status === 'done') {
-          icon.innerHTML = '<span class="material-symbols-outlined text-sm" style="color:white;font-variation-settings:\'FILL\' 1">check</span>';
-          icon.style.background = '#4a6453';
-          row.style.borderColor = '#4a6453';
-          row.style.background  = '#cdead3';
-          if (msg) msg.textContent = '';
-        } else if (status === 'error') {
-          icon.innerHTML = '<span class="material-symbols-outlined text-sm" style="color:white">close</span>';
-          icon.style.background = '#9f403d';
-          row.style.borderColor = '#9f403d';
-          if (msg) msg.textContent = '';
-          const errBox = document.getElementById('inst-error');
-          errBox.classList.remove('hidden');
-          errBox.textContent = message || 'Something went wrong';
-          document.getElementById('inst-retry').classList.remove('hidden');
-        } else if (status === 'skip') {
-          icon.innerHTML = '<span class="material-symbols-outlined text-sm" style="color:white;font-variation-settings:\'FILL\' 1">check</span>';
-          icon.style.background = '#4a6453';
-          row.style.borderColor = '#4a6453';
-          row.style.background  = '#cdead3';
-          if (msg) msg.textContent = 'Already installed';
-        }
+    // ── Step progress ──────────────────────────────────────────────────────────
+    window.__installProgress = (step, status, message) => {
+      if (step === 'complete' && status === 'done') {
+        setTimeout(() => this._show(5), 1000);
+        return;
       }
 
-      // Complete — move to step 5
-      if (step === 'complete' && status === 'done') {
-        setTimeout(() => this._show(5), 800);
+      const row  = document.getElementById(`inst-${step}`);
+      const icon = document.getElementById(`inst-${step}-icon`);
+      const sub  = document.getElementById(`inst-${step}-sub`);
+      if (!row) return;
+
+      const iconBase = 'font-size:12px;color:white';
+
+      switch (status) {
+        case 'running':
+          icon.innerHTML = `<span class="material-symbols-outlined animate-spin" style="${iconBase}">progress_activity</span>`;
+          icon.style.background = '#4a6453';
+          row.style.borderColor = '#4a6453';
+          break;
+
+        case 'done':
+          icon.innerHTML = `<span class="material-symbols-outlined" style="${iconBase};font-variation-settings:'FILL' 1">check</span>`;
+          icon.style.background = '#4a6453';
+          row.style.borderColor = '#4a6453';
+          row.style.background  = '#dff0e6';
+          if (sub) sub.textContent = '';
+          break;
+
+        case 'skip':
+          icon.innerHTML = `<span class="material-symbols-outlined" style="${iconBase};font-variation-settings:'FILL' 1">check</span>`;
+          icon.style.background = '#7a9e8a';
+          row.style.borderColor = '#a8b5b2';
+          row.style.background  = '#eff5f2';
+          if (sub) sub.textContent = 'already installed';
+          break;
+
+        case 'error':
+          icon.innerHTML = `<span class="material-symbols-outlined" style="${iconBase}">close</span>`;
+          icon.style.background = '#9f403d';
+          row.style.borderColor = '#9f403d';
+          row.style.background  = '#fde8e8';
+          if (message) {
+            const errBox = document.getElementById('inst-error');
+            errBox.classList.remove('hidden');
+            errBox.textContent = message;
+          }
+          document.getElementById('inst-retry').classList.remove('hidden');
+          break;
       }
     };
 
-    // Send install command to Swift (via WKScriptMessageHandler)
-    // Falls back to a simulated check if not in the native app
+    // ── Kick off install ───────────────────────────────────────────────────────
     if (window.webkit?.messageHandlers?.biomeInstall) {
+      // Native macOS app — send to Swift
       window.webkit.messageHandlers.biomeInstall.postMessage({
-        action: 'install',
+        action:    'install',
         provider:  this.choices.provider,
         apiKey:    this.choices.apiKey,
         modelType: this.choices.modelType,
       });
     } else {
-      // Browser fallback — simulate for dev/testing
-      console.log('[setup] Not in native app, simulating install...');
-      const fakeSteps = ['xcode', 'homebrew', 'node', 'openclaw', 'config', 'gateway', 'verify'];
+      // Browser fallback — simulate for dev
+      console.log('[Biome] Browser mode — simulating install');
+      const fakeSteps = ['xcode', 'homebrew', 'node', 'openclaw', 'config', 'gateway'];
+      const fakeAI = [
+        'Installing developer tools — this is a one-time setup on any new Mac.',
+        'Homebrew is a package manager that makes installing software safe and easy.',
+        'Node.js is needed to run your AI agent. Installing now.',
+        'OpenClaw is the core of your AI agent. Almost done.',
+        'Writing your configuration and registering the service.',
+        'Starting up the AI gateway on your machine.',
+      ];
       let i = 0;
       const tick = () => {
         if (i >= fakeSteps.length) {
-          window.__installProgress('complete', 'done');
+          window.__installAI('Everything is running. Your AI agent is live!');
+          setTimeout(() => window.__installProgress('complete', 'done'), 600);
           return;
         }
-        window.__installProgress(fakeSteps[i], 'running', 'Checking...');
+        window.__installAI(fakeAI[i]);
+        window.__installProgress(fakeSteps[i], 'running');
         setTimeout(() => {
-          window.__installProgress(fakeSteps[i], 'done');
+          window.__installProgress(fakeSteps[i], i === 0 ? 'skip' : 'done');
           i++;
-          setTimeout(tick, 400);
-        }, 600);
+          setTimeout(tick, 500);
+        }, 900);
       };
-      tick();
+      setTimeout(tick, 300);
     }
 
-    // Retry button
-    document.getElementById('inst-retry')?.addEventListener('click', () => {
-      this._show(4);
-    });
+    document.getElementById('inst-retry')?.addEventListener('click', () => this._show(4));
   }
 
   // ── Step 5 — All set ─────────────────────────────────────────────────────────
