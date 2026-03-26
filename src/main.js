@@ -1572,6 +1572,11 @@ function render() {
             <span class="material-symbols-outlined shrink-0">settings</span>
             <span class="text-sm sidebar-item-text">Settings</span>
           </a>
+          <!-- DEV ONLY — remove before release -->
+          <a class="sidebar-item-padding flex items-center gap-3 px-4 py-2 rounded-lg transition-all cursor-pointer" style="color:#9f403d;opacity:0.7" onclick="window._resetSetup()" title="Dev: restart setup wizard">
+            <span class="material-symbols-outlined shrink-0" style="font-size:18px">restart_alt</span>
+            <span class="text-sm sidebar-item-text">Restart Setup</span>
+          </a>
           <a class="sidebar-item-padding flex items-center gap-3 px-4 py-2 text-[#506A58]/70 dark:text-[#a8b5b2] hover:bg-[#fbfdfc]/60 rounded-lg transition-all cursor-pointer" onclick="window.__nordicGw.connect()">
             <div class="w-2.5 h-2.5 rounded-full ${state.connected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-400 animate-pulse'} overflow-hidden shrink-0 ml-1"></div>
             <span class="text-sm font-medium ml-1 sidebar-item-text">${state.connected ? 'Connected' : 'Offline'}</span>
@@ -1656,6 +1661,8 @@ window._newSession = () => {
 };
 window._openHistory = () => openHistory();
 window._openHelp = () => openHelp();
+// DEV ONLY — remove before release
+window._resetSetup = () => { Object.keys(localStorage).filter(k => k.startsWith('biome')).forEach(k => localStorage.removeItem(k)); location.reload(); };
 window._selectSession = (key) => { state.sessionKey = key; state.messages = []; state.sidebarPanel = null; render(); if (state.connected) loadHistory(); };
 window._toggleMonitor = () => { state.monitorOpen = !state.monitorOpen; if (state.monitorOpen) loadPresence(); render(); };
 window._closeSkillPanel = () => { state.selectedSkillKey = null; document.getElementById('skill-panel')?.remove(); };
