@@ -1119,7 +1119,7 @@ function openSettings() {
           <option value="gemini" ${provider === 'gemini' ? 'selected' : ''}>Google Gemini</option>
           <option value="openai" ${provider === 'openai' ? 'selected' : ''}>OpenAI</option>
           <option value="ollama" ${provider === 'ollama' ? 'selected' : ''}>Ollama (local)</option>
-          <option value="plan"   ${provider === 'plan'   ? 'selected' : ''}>Biome Plan</option>
+          <option value="plan"   ${provider === 'plan'   ? 'selected' : ''} disabled>Biome Plan (coming soon)</option>
         </select>
       </div>
 
@@ -1214,7 +1214,7 @@ function openSettings() {
     const url = input.value.trim();
     if (!url) return;
     if (!state.customSources) state.customSources = [];
-    state.customSources.push({ url });
+    state.customSources.push({ id: Date.now().toString(36), url });
     input.value = '';
     renderSources();
   };
@@ -1266,6 +1266,7 @@ function openSettings() {
     if (!['ollama', 'plan'].includes(providerEl.value)) {
       localStorage.setItem('biome-api-key', keyInput.value.trim());
     }
+    localStorage.setItem('nordic-custom-sources', JSON.stringify(state.customSources || []));
     document.getElementById('set-saved-msg').classList.remove('hidden');
     setTimeout(() => document.getElementById('set-saved-msg')?.classList.add('hidden'), 2000);
   };

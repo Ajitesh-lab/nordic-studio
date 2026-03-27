@@ -116,9 +116,34 @@ class SetupWizard {
     setTimeout(() => input.focus(), 350);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
     input.addEventListener('input', () => err.classList.add('hidden'));
-    btn.addEventListener('click', () => {
-      if (!input.value.trim()) { err.classList.remove('hidden'); return; }
-      this.choices.key = input.value.trim();
+    btn.addEventListener('click', async () => {
+      const key = input.value.trim();
+      if (!key) { err.classList.remove('hidden'); return; }
+
+      // Validate against backend (if unreachable, proceed anyway)
+      btn.disabled = true;
+      btn.innerHTML = 'Verifying…';
+      try {
+        const r = await fetch('http://localhost:4000/validate-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key }),
+          signal: AbortSignal.timeout(4000),
+        });
+        const data = await r.json();
+        if (!data.ok) {
+          err.textContent = data.error || 'Invalid access key';
+          err.classList.remove('hidden');
+          btn.disabled = false;
+          btn.innerHTML = 'Continue <span class="material-symbols-outlined text-base" style="font-variation-settings:\'FILL\' 1">arrow_forward</span>';
+          return;
+        }
+      } catch {
+        // Backend unreachable — allow offline / self-hosted use
+      }
+
+      this.choices.key = key;
+      localStorage.setItem('biome-access-key', key);
       this._show(2);
     });
   }
@@ -134,11 +159,29 @@ class SetupWizard {
       <div class="space-y-3">
         ${this._modelCard('cloud', 'cloud', 'tertiary-container', 'tertiary', 'Use my own API key', 'Gemini or OpenAI — paste your key and go')}
         ${this._modelCard('local', 'computer', 'secondary-container', 'secondary', 'Run locally on my Mac', 'Fully private — no internet needed after setup')}
-        ${this._modelCard('plan',  'star',     'primary-container',   'primary',   'Biome plan', 'We handle everything — no API key needed', true)}
+        ${this._modelCard('plan',  'star',     'primary-container',   'primary',   'Biome plan', 'We handle everything — no API key needed', true, true)}
       </div>`;
   }
 
-  _modelCard(type, icon, bg, fg, title, subtitle, badge = false) {
+  _modelCard(type, icon, bg, fg, title, subtitle, badge = false, comingSoon = false) {
+    if (comingSoon) {
+      return `
+        <div class="wz-model-card w-full text-left px-5 py-4 rounded-xl border-2 cursor-not-allowed"
+          style="background:#f5f5f5;border-color:#d4d4d4;opacity:0.55" data-type="${type}" data-coming-soon="true">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style="background:#e0e0e0">
+              <span class="material-symbols-outlined text-xl" style="color:#9e9e9e">${icon}</span>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-sm" style="color:#757575">${title}</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold" style="background:#9e9e9e;color:#fff">Coming soon</span>
+              </div>
+              <div class="text-xs mt-0.5" style="color:#9e9e9e">${subtitle}</div>
+            </div>
+          </div>
+        </div>`;
+    }
     return `
       <button class="wz-model-card w-full text-left px-5 py-4 rounded-xl border-2 transition-all active:scale-[0.98] hover:border-primary"
         style="background:#eff5f2;border-color:#a8b5b2" data-type="${type}">
@@ -159,6 +202,7 @@ class SetupWizard {
 
   _wireStep2() {
     document.querySelectorAll('.wz-model-card').forEach(card => {
+      if (card.dataset.comingSoon) return; // disabled — not yet available
       card.addEventListener('click', () => {
         this.choices.modelType = card.dataset.type;
         this._show(3);
