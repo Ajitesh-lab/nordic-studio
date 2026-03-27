@@ -4,6 +4,10 @@
 
 const SETUP_KEY = 'biome-setup-v1';
 
+// Update this to your deployed backend URL before shipping.
+// Locally: http://localhost:4000  |  Production: https://your-backend.railway.app
+const BIOME_BACKEND = 'http://localhost:4000';
+
 export function runSetup() {
   return new Promise(resolve => {
     const splash = document.getElementById('splash-screen');
@@ -104,7 +108,7 @@ class SetupWizard {
           Continue <span class="material-symbols-outlined text-base" style="font-variation-settings:'FILL' 1">arrow_forward</span>
         </button>
         <p class="text-center text-xs" style="color:#717d7b">
-          Don't have a key? <a href="#" class="underline underline-offset-2" style="color:#4a6453" onclick="return false">Apply for access</a>
+          Don't have a key? <a href="#" class="underline underline-offset-2" style="color:#4a6453" id="wz-apply-link">Apply for access</a>
         </p>
       </div>`;
   }
@@ -116,6 +120,18 @@ class SetupWizard {
     setTimeout(() => input.focus(), 350);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
     input.addEventListener('input', () => err.classList.add('hidden'));
+
+    // "Apply for access" — open signup form in system browser
+    document.getElementById('wz-apply-link')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      const url = `${BIOME_BACKEND}/signup`;
+      if (window.webkit?.messageHandlers?.biomeInstall) {
+        window.webkit.messageHandlers.biomeInstall.postMessage({ action: 'open_url', url });
+      } else {
+        window.open(url, '_blank');
+      }
+    });
+
     btn.addEventListener('click', async () => {
       const key = input.value.trim();
       if (!key) { err.classList.remove('hidden'); return; }
@@ -124,7 +140,7 @@ class SetupWizard {
       btn.disabled = true;
       btn.innerHTML = 'Verifying…';
       try {
-        const r = await fetch('http://localhost:4000/validate-key', {
+        const r = await fetch(`${BIOME_BACKEND}/validate-key`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key }),
@@ -138,6 +154,8 @@ class SetupWizard {
           btn.innerHTML = 'Continue <span class="material-symbols-outlined text-base" style="font-variation-settings:\'FILL\' 1">arrow_forward</span>';
           return;
         }
+        // Personalise with name returned from backend
+        if (data.name) this.choices.userName = data.name;
       } catch {
         // Backend unreachable — allow offline / self-hosted use
       }
@@ -565,12 +583,14 @@ class SetupWizard {
   }
 
   _wireStepDone() {
+    const firstName = (this.choices.userName || '').split(' ')[0];
+    const greeting = firstName ? `Welcome, ${firstName}! ` : '';
     const messages = {
-      cloud: "Your API key is saved and your agent is ready. I'm here whenever you need — just start typing.",
-      local: "Your local model is running on your Mac. Everything stays private on your device. Let's get started.",
-      plan:  "Your Biome plan is active. No setup, no limits — just open the app and use it. Welcome aboard.",
+      cloud: `${greeting}Your API key is saved and your agent is ready. I'm here whenever you need — just start typing.`,
+      local: `${greeting}Your local model is running on your Mac. Everything stays private on your device. Let's get started.`,
+      plan:  `${greeting}Your Biome plan is active. No setup, no limits — just open the app and use it. Welcome aboard.`,
     };
-    const msg = messages[this.choices.modelType] || "Everything is configured. Open Biome whenever you're ready.";
+    const msg = messages[this.choices.modelType] || `${greeting}Everything is configured. Open Biome whenever you're ready.`;
     const el  = document.getElementById('wz-guide-msg');
     const btn = document.getElementById('wz-open');
 
