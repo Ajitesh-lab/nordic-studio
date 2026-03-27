@@ -4,9 +4,7 @@
 
 const SETUP_KEY = 'biome-setup-v1';
 
-// Update this to your deployed backend URL before shipping.
-// Locally: http://localhost:4000  |  Production: https://your-backend.railway.app
-const BIOME_BACKEND = 'http://localhost:4000';
+const BIOME_BACKEND = 'https://reminder-karl-touring-viruses.trycloudflare.com';
 
 export function runSetup() {
   return new Promise(resolve => {
