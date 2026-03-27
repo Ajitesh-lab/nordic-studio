@@ -22,9 +22,36 @@ function revealApp(delay = 2000) {
   }, delay);
 }
 
+async function gatewayAlive() {
+  try {
+    const r = await fetch('http://127.0.0.1:18789/', { signal: AbortSignal.timeout(2000) });
+    return true; // any response means the gateway is running
+  } catch {
+    return false;
+  }
+}
+
 async function start() {
-  if (localStorage.getItem(SETUP_KEY)) {
-    // Returning user — load main app and reveal after splash
+  const hasSetupFlag = localStorage.getItem(SETUP_KEY);
+
+  if (hasSetupFlag) {
+    // Check if gateway is actually running — if openclaw was wiped, re-run setup
+    const alive = await gatewayAlive();
+    if (!alive) {
+      // Give Swift side a moment to start gateway, then check again
+      await new Promise(r => setTimeout(r, 4000));
+      const aliveRetry = await gatewayAlive();
+      if (!aliveRetry) {
+        // Gateway is genuinely gone — clear setup flag and re-run wizard
+        localStorage.removeItem(SETUP_KEY);
+        const { runSetup } = await import('./setup.js');
+        await runSetup();
+        await import('./main.js');
+        revealApp(200);
+        return;
+      }
+    }
+    // Returning user — gateway is running, load main app
     await import('./main.js');
     revealApp(2000);
   } else {
