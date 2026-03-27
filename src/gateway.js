@@ -81,8 +81,7 @@ export class Gateway {
           displayName: 'Nordic Studio'
         },
         role: 'operator',
-        scopes: ['operator.read', 'operator.write', 'operator.admin'],
-        auth: this.token ? { token: this.token } : undefined
+        scopes: ['operator.read', 'operator.write', 'operator.admin']
       }
     });
   }

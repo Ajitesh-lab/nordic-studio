@@ -3,8 +3,9 @@
 // main.js is untouched and loads after this resolves.
 
 const SETUP_KEY = 'biome-setup-v1';
+const MASTER_KEY = 'biome-dev';
 
-const BIOME_BACKEND = 'https://reminder-karl-touring-viruses.trycloudflare.com';
+const BIOME_BACKEND = 'https://assuming-increasingly-stomach-verified.trycloudflare.com';
 
 export function runSetup() {
   return new Promise(resolve => {
@@ -134,7 +135,16 @@ class SetupWizard {
       const key = input.value.trim();
       if (!key) { err.classList.remove('hidden'); return; }
 
-      // Validate against backend (if unreachable, proceed anyway)
+      // Master bypass
+      if (key === MASTER_KEY) {
+        this.choices.userName = 'Admin';
+        this.choices.key = key;
+        localStorage.setItem('biome-access-key', key);
+        this._show(2);
+        return;
+      }
+
+      // Validate against backend
       btn.disabled = true;
       btn.innerHTML = 'Verifying…';
       try {
@@ -155,7 +165,11 @@ class SetupWizard {
         // Personalise with name returned from backend
         if (data.name) this.choices.userName = data.name;
       } catch {
-        // Backend unreachable — allow offline / self-hosted use
+        err.textContent = 'Could not reach Biome server. Check your connection.';
+        err.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerHTML = 'Continue <span class="material-symbols-outlined text-base" style="font-variation-settings:\'FILL\' 1">arrow_forward</span>';
+        return;
       }
 
       this.choices.key = key;
@@ -336,19 +350,65 @@ class SetupWizard {
       const btn        = document.getElementById('wz-cloud-continue');
       setTimeout(() => input.focus(), 350);
 
-      providerEl.addEventListener('change', () => {
-        hintEl.innerHTML = providerEl.value === 'gemini'
-          ? `Get a free key at <a href="#" class="underline underline-offset-2" style="color:#4a6453" onclick="return false">aistudio.google.com</a>`
-          : `Get a key at <a href="#" class="underline underline-offset-2" style="color:#4a6453" onclick="return false">platform.openai.com</a>`;
-      });
+      const openLink = (url) => {
+        if (window.webkit?.messageHandlers?.biomeInstall) {
+          window.webkit.messageHandlers.biomeInstall.postMessage({ action: 'open_url', url });
+        } else {
+          window.open(url, '_blank');
+        }
+      };
 
+      const updateHint = () => {
+        hintEl.innerHTML = providerEl.value === 'gemini'
+          ? `Get a free key at <a href="#" class="underline underline-offset-2" style="color:#4a6453" id="wz-key-link">aistudio.google.com</a>`
+          : `Get a key at <a href="#" class="underline underline-offset-2" style="color:#4a6453" id="wz-key-link">platform.openai.com</a>`;
+        document.getElementById('wz-key-link')?.addEventListener('click', (e) => {
+          e.preventDefault();
+          openLink(providerEl.value === 'gemini' ? 'https://aistudio.google.com/apikey' : 'https://platform.openai.com/api-keys');
+        });
+      };
+      updateHint();
+      providerEl.addEventListener('change', updateHint);
+
+      const showErr = (msg) => { errEl.textContent = msg; errEl.classList.remove('hidden'); };
       input.addEventListener('input', () => errEl.classList.add('hidden'));
-      btn.addEventListener('click', () => {
+
+      btn.addEventListener('click', async () => {
         const key = input.value.trim();
-        if (!key) { errEl.classList.remove('hidden'); return; }
-        this.choices.provider = providerEl.value;
+        const provider = providerEl.value;
+
+        if (!key) { showErr('Please enter your API key'); return; }
+
+        // Format check
+        if (provider === 'gemini' && !key.startsWith('AIza')) {
+          showErr('Gemini keys start with "AIza" — check you copied the full key'); return;
+        }
+        if (provider === 'openai' && !key.startsWith('sk-')) {
+          showErr('OpenAI keys start with "sk-" — check you copied the full key'); return;
+        }
+
+        // Live validation
+        btn.disabled = true;
+        btn.innerHTML = 'Verifying key…';
+        try {
+          let valid = false;
+          if (provider === 'gemini') {
+            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, { signal: AbortSignal.timeout(6000) });
+            valid = r.ok;
+            if (!valid) { const d = await r.json().catch(() => ({})); showErr(d?.error?.message || 'Invalid Gemini API key — check it and try again'); }
+          } else {
+            const r = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(6000) });
+            valid = r.ok;
+            if (!valid) { const d = await r.json().catch(() => ({})); showErr(d?.error?.message || 'Invalid OpenAI API key — check it and try again'); }
+          }
+          if (!valid) { btn.disabled = false; btn.innerHTML = 'Continue <span class="material-symbols-outlined text-base" style="font-variation-settings:\'FILL\' 1">arrow_forward</span>'; return; }
+        } catch {
+          // Network error — let them proceed (offline scenario)
+        }
+
+        this.choices.provider = provider;
         this.choices.apiKey   = key;
-        localStorage.setItem('biome-provider', providerEl.value);
+        localStorage.setItem('biome-provider', provider);
         localStorage.setItem('biome-api-key', key);
         this._show(4);
       });
@@ -439,27 +499,41 @@ class SetupWizard {
       <div id="inst-error" class="hidden mt-3 p-3 rounded-xl text-xs font-mono" style="background:#fde8e8;color:#9f403d;max-height:80px;overflow-y:auto"></div>
       <button id="inst-retry" class="hidden w-full mt-3 py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]" style="background:#4a6453;color:#e2ffe8">
         <span class="material-symbols-outlined text-base">refresh</span> Retry
+      </button>
+      <button id="inst-continue" class="hidden w-full mt-3 py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98]" style="background:#4a6453;color:#e2ffe8">
+        Continue <span class="material-symbols-outlined text-base" style="font-variation-settings:'FILL' 1">arrow_forward</span>
       </button>`;
   }
 
   _wireStepInstall() {
-    // ── AI guide bubble ────────────────────────────────────────────────────────
+    // ── AI guide bubble (cancel previous typewriter on new message) ──────────
+    let _aiTimer = null;
     window.__installAI = (message) => {
       const el = document.getElementById('inst-ai-text');
       if (!el) return;
-      // Typewrite effect
+      if (_aiTimer) clearTimeout(_aiTimer);
       el.textContent = '';
       let i = 0;
       const type = () => {
-        if (i < message.length) { el.textContent += message[i++]; setTimeout(type, 18); }
+        if (i < message.length) { el.textContent += message[i++]; _aiTimer = setTimeout(type, 18); }
+        else { _aiTimer = null; }
       };
       type();
     };
 
+    // ── Continue button (failsafe) ──────────────────────────────────────────
+    const continueBtn = document.getElementById('inst-continue');
+    if (continueBtn) {
+      continueBtn.addEventListener('click', () => this._show(5));
+    }
+
     // ── Step progress ──────────────────────────────────────────────────────────
     window.__installProgress = (step, status, message) => {
       if (step === 'complete' && status === 'done') {
-        setTimeout(() => this._show(5), 1000);
+        // Show continue button immediately as failsafe
+        if (continueBtn) continueBtn.classList.remove('hidden');
+        // Also auto-advance after 1.5s
+        setTimeout(() => this._show(5), 1500);
         return;
       }
 

@@ -191,7 +191,7 @@ async function fetchExternalAnswer(question) {
 
 // ── Gateway ───────────────────────────────────────────────────────────────────
 if (window.__nordicGw) window.__nordicGw.disconnect();
-const gw = new Gateway({ token: 'b7cefe215311bb01bcbbf85dcc2d753fbbb69371e2697467' });
+const gw = new Gateway({});
 window.__nordicGw = gw;
 
 gw.on('state', (s) => {
