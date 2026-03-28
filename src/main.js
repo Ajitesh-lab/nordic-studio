@@ -61,6 +61,11 @@ const state = window.__nordicState || {
   attachments: [],
   // ── Plus-menu (input bar attachment popup) ────────────────────────────────
   plusMenuOpen: false,
+  headerMenuOpen: false,
+  // ── Long-term memory ──────────────────────────────────────────────────────
+  memory: JSON.parse(localStorage.getItem('biome-memory') || '[]'),
+  // ── Agent mode (direct API + tool loop, no OpenClaw required) ────────────
+  agentMode: true,
 };
 window.__nordicState = state;
 
@@ -748,6 +753,284 @@ function buildModels() {
 function getModels() { return buildModels(); }
 
 function modelLabel(id) { return (getModels().find(m => m.id === id) || getModels()[0] || { label: id }).label; }
+
+// ── Memory system ─────────────────────────────────────────────────────────────
+function saveMemory(content, source = 'note') {
+  const entry = {
+    id: 'mem-' + Date.now(),
+    content: content.trim().slice(0, 500),
+    source,
+    ts: Date.now(),
+    keywords: (content.toLowerCase().match(/\b[a-z]{4,}\b/g) || []).slice(0, 30),
+  };
+  state.memory.unshift(entry);
+  if (state.memory.length > 500) state.memory = state.memory.slice(0, 500);
+  localStorage.setItem('biome-memory', JSON.stringify(state.memory));
+  return entry;
+}
+
+function searchMemory(query, k = 5) {
+  if (!state.memory.length) return [];
+  const words = new Set((query.toLowerCase().match(/\b[a-z]{3,}\b/g) || []));
+  if (!words.size) return state.memory.slice(0, k);
+  return state.memory
+    .map(m => ({ ...m, score: (m.keywords || []).filter(w => words.has(w)).length }))
+    .filter(m => m.score > 0)
+    .sort((a, b) => b.score - a.score || b.ts - a.ts)
+    .slice(0, k);
+}
+
+function injectMemoryContext() {
+  if (!state.memory.length) return '';
+  const recent = state.memory.slice(0, 12).map(m => `• ${m.content}`).join('\n');
+  return `\n\n[Memory from past conversations:\n${recent}]\n`;
+}
+
+function autoExtractMemories(userText) {
+  const triggers = ['i prefer', 'i like', 'i always', "i'm a ", 'i am a ', 'my name is', 'i work on', 'i need', 'my project', 'i use ', 'i want to'];
+  const lower = userText.toLowerCase();
+  if (triggers.some(t => lower.includes(t)) && userText.length < 300) {
+    saveMemory(userText, 'auto');
+  }
+}
+
+// ── Direct API call (bypasses OpenClaw gateway) ──────────────────────────────
+async function callDirectAPI(messages, tools = []) {
+  const modelId = state.currentModel;
+  const slash = modelId.indexOf('/');
+  const provider = modelId.slice(0, slash);
+  const model    = modelId.slice(slash + 1);
+
+  // ── Google Gemini ───────────────────────────────────────────────────────
+  if (provider === 'google') {
+    const apiKey = localStorage.getItem('biome-key-gemini') || localStorage.getItem('biome-api-key');
+    if (!apiKey) throw new Error('No Gemini API key — go to Settings → API Keys.');
+    const sysMsg = messages.find(m => m.role === 'system');
+    const chatMsgs = messages.filter(m => m.role !== 'system').map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content || m.text || '' }],
+    }));
+    const body = { contents: chatMsgs };
+    if (sysMsg) body.systemInstruction = { parts: [{ text: sysMsg.content }] };
+    if (tools.length) body.tools = [{ functionDeclarations: tools.map(t => ({ name: t.name, description: t.description, parameters: t.parameters })) }];
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!r.ok) { const e = await r.text(); throw new Error(`Gemini ${r.status}: ${e.slice(0, 200)}`); }
+    const d = await r.json();
+    const parts = d.candidates?.[0]?.content?.parts || [];
+    const fc = parts.find(p => p.functionCall);
+    if (fc) return { toolCall: { name: fc.functionCall.name, args: fc.functionCall.args } };
+    return { text: parts.filter(p => p.text).map(p => p.text).join('') };
+  }
+
+  // ── Anthropic ───────────────────────────────────────────────────────────
+  if (provider === 'anthropic') {
+    const apiKey = localStorage.getItem('biome-key-anthropic');
+    if (!apiKey) throw new Error('No Anthropic API key — go to Settings → API Keys.');
+    const sysMsg = messages.find(m => m.role === 'system');
+    const chatMsgs = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content || m.text || '' }));
+    const body = { model, max_tokens: 4096, messages: chatMsgs };
+    if (sysMsg) body.system = sysMsg.content;
+    if (tools.length) body.tools = tools.map(t => ({ name: t.name, description: t.description, input_schema: t.parameters }));
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) { const e = await r.text(); throw new Error(`Anthropic ${r.status}: ${e.slice(0, 200)}`); }
+    const d = await r.json();
+    const toolUse = d.content?.find(b => b.type === 'tool_use');
+    if (toolUse) return { toolCall: { name: toolUse.name, args: toolUse.input } };
+    return { text: d.content?.filter(b => b.type === 'text').map(b => b.text).join('') || '' };
+  }
+
+  // ── OpenAI-compatible (openai, xai/grok, mistral, perplexity) ───────────
+  const providerKeyMap = { openai: 'openai', xai: 'grok', mistral: 'mistral', perplexity: 'perplexity' };
+  const keyName = providerKeyMap[provider];
+  if (keyName) {
+    const apiKey = localStorage.getItem(`biome-key-${keyName}`);
+    if (!apiKey) throw new Error(`No ${provider} API key — go to Settings → API Keys.`);
+    const endpoints = {
+      openai: 'https://api.openai.com/v1/chat/completions',
+      xai: 'https://api.x.ai/v1/chat/completions',
+      mistral: 'https://api.mistral.ai/v1/chat/completions',
+      perplexity: 'https://api.perplexity.ai/chat/completions',
+    };
+    const body = { model, messages: messages.map(m => ({ role: m.role, content: m.content || m.text || '' })) };
+    if (tools.length) { body.tools = tools.map(t => ({ type: 'function', function: t })); body.tool_choice = 'auto'; }
+    const r = await fetch(endpoints[provider], {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) { const e = await r.text(); throw new Error(`${provider} ${r.status}: ${e.slice(0, 200)}`); }
+    const d = await r.json();
+    const msg = d.choices?.[0]?.message;
+    if (msg?.tool_calls?.length) {
+      const tc = msg.tool_calls[0];
+      return { toolCall: { name: tc.function.name, args: JSON.parse(tc.function.arguments || '{}') } };
+    }
+    return { text: msg?.content || '' };
+  }
+
+  throw new Error(`Unsupported provider: ${provider}`);
+}
+
+// ── Agent tool definitions ────────────────────────────────────────────────────
+const AGENT_TOOLS = [
+  {
+    name: 'remember',
+    description: 'Save an important fact, preference, or piece of information to long-term memory for use in future conversations.',
+    parameters: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'The fact or information to remember (be specific and self-contained)' },
+        category: { type: 'string', description: 'Category of memory', enum: ['preference', 'fact', 'project', 'person', 'task', 'note'] },
+      },
+      required: ['content'],
+    },
+  },
+  {
+    name: 'recall',
+    description: 'Search long-term memory for relevant information from past conversations.',
+    parameters: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'What to search for in memory' } },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'calculate',
+    description: 'Precisely evaluate a mathematical expression. Use this instead of doing mental arithmetic.',
+    parameters: {
+      type: 'object',
+      properties: { expression: { type: 'string', description: 'Math expression, e.g. "2 ** 10 + 144 / 12"' } },
+      required: ['expression'],
+    },
+  },
+  {
+    name: 'run_code',
+    description: 'Execute JavaScript code in a sandboxed environment and capture console output. Use for data processing, calculations, or generating outputs.',
+    parameters: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'JavaScript code to execute. Use console.log() to output results.' },
+        description: { type: 'string', description: 'What this code does, shown to the user' },
+      },
+      required: ['code'],
+    },
+  },
+];
+
+// ── Tool executor ─────────────────────────────────────────────────────────────
+async function executeTool(name, args) {
+  if (name === 'remember') {
+    const entry = saveMemory(args.content, args.category || 'note');
+    return { ok: true, message: `Saved: "${args.content.slice(0, 80)}${args.content.length > 80 ? '…' : ''}"` };
+  }
+  if (name === 'recall') {
+    const results = searchMemory(args.query, 8);
+    if (!results.length) return { ok: true, results: [], message: 'No relevant memories found.' };
+    return { ok: true, results: results.map(m => ({ content: m.content, source: m.source, when: timeAgo(m.ts) })) };
+  }
+  if (name === 'calculate') {
+    try {
+      const safe = args.expression
+        .replace(/\bsqrt\b/g, 'Math.sqrt').replace(/\babs\b/g, 'Math.abs')
+        .replace(/\bfloor\b/g, 'Math.floor').replace(/\bceil\b/g, 'Math.ceil')
+        .replace(/\bround\b/g, 'Math.round').replace(/\bPI\b/g, 'Math.PI')
+        .replace(/\bE\b/g, 'Math.E').replace(/\^/g, '**')
+        .replace(/[^0-9+\-*/().,\s*Math.\w]/g, '');
+      // eslint-disable-next-line no-new-func
+      const result = Function('"use strict"; return (' + safe + ')')();
+      return { ok: true, expression: args.expression, result };
+    } catch (e) {
+      return { ok: false, error: 'Cannot evaluate: ' + e.message };
+    }
+  }
+  if (name === 'run_code') {
+    return await runCodeSandbox(args.code, args.description);
+  }
+  return { ok: false, error: `Unknown tool: ${name}` };
+}
+
+// ── Code sandbox (hidden iframe) ──────────────────────────────────────────────
+function runCodeSandbox(code, description = '') {
+  return new Promise(resolve => {
+    const id = 'sb-' + Date.now();
+    const iframe = document.createElement('iframe');
+    iframe.id = id;
+    iframe.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;border:0';
+    iframe.setAttribute('sandbox', 'allow-scripts');
+
+    const timer = setTimeout(() => {
+      window.removeEventListener('message', handler);
+      iframe.remove();
+      resolve({ ok: false, error: 'Execution timed out (5s)', output: '' });
+    }, 5000);
+
+    function handler(e) {
+      if (e.data?.sandboxId !== id) return;
+      clearTimeout(timer);
+      window.removeEventListener('message', handler);
+      iframe.remove();
+      resolve({ ok: true, output: (e.data.logs || []).join('\n'), logs: e.data.logs });
+    }
+    window.addEventListener('message', handler);
+
+    const escaped = code.replace(/`/g, '\\`').replace(/<\/script>/gi, '<\\/script>');
+    iframe.srcdoc = `<!DOCTYPE html><html><body><script>
+      const _L=[];
+      console.log=(...a)=>_L.push(a.map(x=>typeof x==='object'?JSON.stringify(x,null,2):String(x)).join(' '));
+      console.error=(...a)=>_L.push('ERR: '+a.join(' '));
+      console.warn=(...a)=>_L.push('WARN: '+a.join(' '));
+      try{ ${escaped} }catch(e){ _L.push('Error: '+e.message); }
+      parent.postMessage({sandboxId:'${id}',logs:_L},'*');
+    <\/script></body></html>`;
+    document.body.appendChild(iframe);
+  });
+}
+
+// ── Agent loop (direct API + tools) ──────────────────────────────────────────
+async function runAgentLoop(userText) {
+  autoExtractMemories(userText);
+  const memories = searchMemory(userText, 5);
+  const memCtx = memories.length
+    ? `\n\nRelevant memories:\n${memories.map(m => `• ${m.content}`).join('\n')}`
+    : '';
+
+  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const systemPrompt = `You are Taiga, a capable AI assistant inside the Biome platform. Today is ${today}.
+
+You have tools: remember (save facts), recall (search memory), calculate (precise math), run_code (execute JavaScript).
+
+Use tools when they genuinely help — not for simple conversation. For memory: recall first before answering questions about the user's preferences/history.${memCtx}`;
+
+  const apiMessages = [
+    { role: 'system', content: systemPrompt },
+    ...state.messages.map(m => ({ role: m.role, content: m.text || m.content || '' })),
+    { role: 'user', content: userText },
+  ];
+
+  const toolLog = [];
+  for (let i = 0; i < 8; i++) {
+    const result = await callDirectAPI(apiMessages, AGENT_TOOLS);
+    if (!result.toolCall) return { text: result.text || '', toolLog };
+
+    const { name, args } = result.toolCall;
+    const labels = { run_code: 'running code', recall: 'searching memory', remember: 'saving memory', calculate: 'calculating' };
+    setThinkingLabel(labels[name] || 'working');
+
+    const toolResult = await executeTool(name, args);
+    toolLog.push({ tool: name, args, result: toolResult });
+
+    // Inject back as plain text (works across all providers)
+    apiMessages.push({ role: 'assistant', content: `[Called tool: ${name} with ${JSON.stringify(args)}]` });
+    apiMessages.push({ role: 'user', content: `[Tool result: ${JSON.stringify(toolResult)}]` });
+  }
+  return { text: 'Reached step limit.', toolLog };
+}
 
 function renderModelPicker() {
   if (!state.modelPickerOpen) {
@@ -1672,7 +1955,8 @@ function buildMessageWithContext(userText) {
   const mandate = RESPONSE_MANDATE;
   const primer = state.messages.length === 0 ? SESSION_PRIMER : '';
 
-  if (!sources.length && !tools.length) return primer + userText + mandate;
+  const memCtx = injectMemoryContext();
+  if (!sources.length && !tools.length) return primer + memCtx + userText + mandate;
 
   let context = '';
 
@@ -1694,31 +1978,67 @@ function buildMessageWithContext(userText) {
     context += `I have the following tools configured. When relevant, use them to complete tasks:\n\n${toolList}\n\n`;
   }
 
-  return `${primer}${context}My question: ${userText}${mandate}`;
+  return `${primer}${memCtx}${context}My question: ${userText}${mandate}`;
 }
 
 async function sendMessage(text) {
   if (!text.trim()) return;
-  if (state.streaming) { showToast('Still processing…'); return; }  // prevent overlap
-  if (!state.connected) { showToast('Not connected — retrying…'); gw.connect(); return; }
+  if (state.streaming) { showToast('Still processing…'); return; }
 
-  state._nudgeCount = 0; // reset nudge counter for each new user message
-  state._turnDone = false; // allow finals to be processed again
-  const msgToSend = buildMessageWithContext(text);
-
+  state._nudgeCount = 0;
+  state._turnDone = false;
   appendMessage('user', text);
   state.streamText = ''; state.streaming = true;
   resetThinkingLabel();
   updateSendBtn(); updateStreamingMessage();
-  try {
-    await gw.chatSend(msgToSend, state.sessionKey);
-    armResponseTimer(); // start 75s watchdog from when OpenClaw ACKed the send
-  } catch (e) {
-    clearResponseTimer();
-    resetThinkingLabel();
-    state.streaming = false;
-    updateSendBtn();
-    appendMessage('assistant', 'Error: ' + (e.message || 'Failed to send'));
+
+  if (state.connected) {
+    // OpenClaw gateway path (full Claude Code agent with browser tools)
+    try {
+      const msgToSend = buildMessageWithContext(text);
+      await gw.chatSend(msgToSend, state.sessionKey);
+      armResponseTimer();
+    } catch (e) {
+      clearResponseTimer();
+      resetThinkingLabel();
+      state.streaming = false;
+      updateSendBtn();
+      appendMessage('assistant', 'Error: ' + (e.message || 'Failed to send'));
+    }
+  } else {
+    // Direct API agent loop (no OpenClaw required)
+    try {
+      const { text: responseText, toolLog } = await runAgentLoop(text);
+      state.streaming = false;
+      resetThinkingLabel();
+      updateSendBtn();
+      document.getElementById('streaming-msg')?.remove();
+
+      let fullResponse = responseText;
+      if (toolLog?.length) {
+        const toolParts = toolLog.map(t => {
+          if (t.tool === 'run_code') {
+            const out = t.result.output || t.result.error || '(no output)';
+            return `\`\`\`\n${out}\n\`\`\``;
+          }
+          if (t.tool === 'calculate') return `**Calculation:** ${t.args.expression} = \`${t.result.result}\``;
+          if (t.tool === 'remember') return `📌 *${t.result.message}*`;
+          if (t.tool === 'recall' && t.result.results?.length) {
+            return `🔍 *Found ${t.result.results.length} relevant memories*`;
+          }
+          return '';
+        }).filter(Boolean).join('\n\n');
+        if (toolParts) fullResponse = toolParts + '\n\n' + responseText;
+      }
+
+      appendMessage('assistant', fullResponse || '(No response)');
+    } catch (e) {
+      state.streaming = false;
+      resetThinkingLabel();
+      updateSendBtn();
+      document.getElementById('streaming-msg')?.remove();
+      appendMessage('assistant', `Error: ${e.message}`);
+    }
   }
 }
 
@@ -1841,187 +2161,297 @@ async function openHistory() {
 function openHelp() { state.sidebarPanel = state.sidebarPanel === 'help' ? null : 'help'; renderSidebarPanel(); }
 
 function openSettings() {
-  // Render a settings overlay instead of sidebar panel
   let overlay = document.getElementById('settings-overlay');
   if (overlay) { overlay.remove(); return; }
-
-  const provider  = localStorage.getItem('biome-provider') || 'gemini';
-  const apiKey    = localStorage.getItem('biome-api-key')   || '';
-  const modelType = localStorage.getItem('biome-model-type') || 'cloud';
 
   overlay = document.createElement('div');
   overlay.id = 'settings-overlay';
   overlay.className = 'fixed inset-0 z-50 flex items-center justify-center';
-  overlay.style.background = 'rgba(0,0,0,0.4)';
-  overlay.style.backdropFilter = 'blur(4px)';
+  overlay.style.cssText = 'background:rgba(0,0,0,0.45);backdrop-filter:blur(6px)';
+
+  const PROVIDERS = [
+    { id: 'gemini',     label: 'Google Gemini',  color: '#4285F4', note: 'Primary — free tier available',   key: 'biome-key-gemini',     placeholder: 'AIza…' },
+    { id: 'anthropic',  label: 'Anthropic',       color: '#c96442', note: 'Claude 3.5 Sonnet / Haiku / Opus', key: 'biome-key-anthropic',  placeholder: 'sk-ant-…' },
+    { id: 'openai',     label: 'OpenAI',          color: '#10a37f', note: 'GPT-4o / o1',                      key: 'biome-key-openai',     placeholder: 'sk-…' },
+    { id: 'grok',       label: 'xAI / Grok',      color: '#000',    note: 'Grok-2 + vision',                  key: 'biome-key-grok',       placeholder: 'xai-…' },
+    { id: 'mistral',    label: 'Mistral',         color: '#e07c39', note: 'Mistral Large / Nemo',             key: 'biome-key-mistral',    placeholder: 'Key…' },
+    { id: 'perplexity', label: 'Perplexity',      color: '#20b2aa', note: 'Sonar — live web search',          key: 'biome-key-perplexity', placeholder: 'pplx-…' },
+  ];
 
   overlay.innerHTML = `
-    <div class="w-full max-w-md rounded-2xl shadow-2xl p-6 relative" style="background:#f7faf8;max-height:90vh;overflow-y:auto">
-      <button id="settings-close" class="absolute top-4 right-4 w-8 h-8 rounded-lg flex items-center justify-center hover:bg-black/5 transition-colors">
-        <span class="material-symbols-outlined text-xl" style="color:#55625f">close</span>
-      </button>
-
-      <h2 class="font-headline text-xl font-extrabold tracking-tight mb-1" style="color:#293533">Settings</h2>
-      <p class="text-xs mb-5" style="color:#717d7b">Manage your Biome configuration</p>
-
-      <!-- Provider -->
-      <div class="mb-4">
-        <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">AI Provider</label>
-        <select id="set-provider" class="w-full px-4 py-2.5 rounded-xl border text-sm outline-none" style="background:#eff5f2;border-color:#a8b5b2;color:#293533">
-          <option value="gemini" ${provider === 'gemini' ? 'selected' : ''}>Google Gemini</option>
-          <option value="openai" ${provider === 'openai' ? 'selected' : ''}>OpenAI</option>
-          <option value="ollama" ${provider === 'ollama' ? 'selected' : ''}>Ollama (local)</option>
-          <option value="plan"   ${provider === 'plan'   ? 'selected' : ''} disabled>Biome Plan (coming soon)</option>
-        </select>
-      </div>
-
-      <!-- API Key -->
-      <div id="set-apikey-section" class="mb-4" ${provider === 'ollama' || provider === 'plan' ? 'style="display:none"' : ''}>
-        <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">API Key</label>
-        <div class="flex gap-2">
-          <input id="set-apikey" type="password" value="${apiKey}" placeholder="Paste your API key"
-            class="flex-1 px-4 py-2.5 rounded-xl border text-sm outline-none font-mono" style="background:#eff5f2;border-color:#a8b5b2;color:#293533" />
-          <button id="set-apikey-toggle" class="px-3 py-2 rounded-xl border text-xs" style="background:#eff5f2;border-color:#a8b5b2;color:#55625f">Show</button>
+    <div class="w-full max-w-lg rounded-2xl shadow-2xl relative flex flex-col" style="background:#f7faf8;max-height:88vh">
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 pt-5 pb-4 border-b border-outline-variant/10 flex-shrink-0">
+        <div>
+          <h2 class="font-headline text-xl font-extrabold tracking-tight" style="color:#293533">Settings</h2>
+          <p class="text-[11px] mt-0.5" style="color:#717d7b">${BIOME.full} · v${BIOME.major}.${BIOME.minor}</p>
         </div>
+        <button id="st-close" class="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-black/5 transition-colors">
+          <span class="material-symbols-outlined" style="color:#55625f;font-size:20px">close</span>
+        </button>
       </div>
-
-      <!-- Custom Data Sources -->
-      <div class="mb-4">
-        <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">Custom Data Sources</label>
-        <div id="set-sources" class="space-y-2 mb-2"></div>
-        <div class="flex gap-2">
-          <input id="set-new-source" type="url" placeholder="https://example.com/data"
-            class="flex-1 px-3 py-2 rounded-xl border text-sm outline-none" style="background:#eff5f2;border-color:#a8b5b2;color:#293533" />
-          <button id="set-add-source" class="px-3 py-2 rounded-xl text-xs font-semibold" style="background:#4a6453;color:#e2ffe8">Add</button>
-        </div>
+      <!-- Tabs -->
+      <div class="flex border-b border-outline-variant/10 px-4 flex-shrink-0">
+        ${['general','keys','memory','status'].map(t => `
+          <button data-tab="${t}" class="st-tab px-4 py-2.5 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors ${t==='general'?'border-primary text-primary':'border-transparent text-on-surface-variant hover:text-on-surface'}" style="font-family:Manrope">
+            ${t==='general'?'General':t==='keys'?'API Keys':t==='memory'?'Memory':'Status'}
+          </button>`).join('')}
       </div>
-
-      <!-- Gateway Status -->
-      <div class="mb-4">
-        <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">Gateway Status</label>
-        <div class="flex items-center gap-2 px-4 py-2.5 rounded-xl border" style="background:#eff5f2;border-color:#a8b5b2">
-          <div id="set-gw-dot" class="w-2 h-2 rounded-full" style="background:#a8b5b2"></div>
-          <span id="set-gw-status" class="text-sm" style="color:#293533">Checking…</span>
-          <button id="set-gw-restart" class="ml-auto text-xs px-2 py-1 rounded-lg" style="background:#4a6453;color:#e2ffe8">Restart</button>
-        </div>
+      <!-- Tab bodies -->
+      <div class="overflow-y-auto flex-1 px-6 py-5" id="st-body"></div>
+      <!-- Footer -->
+      <div class="px-6 py-4 border-t border-outline-variant/10 flex-shrink-0">
+        <button id="st-save" class="w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-[0.98] hover:opacity-90" style="background:#4a6453;color:#e2ffe8">Save Changes</button>
+        <p id="st-saved" class="text-xs text-center mt-2 hidden" style="color:#4a6453">Saved ✓</p>
       </div>
-
-      <!-- Relay Status -->
-      <div class="mb-5">
-        <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">Browser Relay</label>
-        <div class="flex items-center gap-2 px-4 py-2.5 rounded-xl border" style="background:#eff5f2;border-color:#a8b5b2">
-          <div id="set-relay-dot" class="w-2 h-2 rounded-full" style="background:#a8b5b2"></div>
-          <span id="set-relay-status" class="text-sm" style="color:#293533">Checking…</span>
-        </div>
-      </div>
-
-      <!-- Save -->
-      <button id="set-save" class="w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-[0.98] hover:opacity-90" style="background:#4a6453;color:#e2ffe8">
-        Save Changes
-      </button>
-
-      <p id="set-saved-msg" class="text-xs text-center mt-2 hidden" style="color:#4a6453">Saved ✓</p>
-    </div>
-  `;
+    </div>`;
 
   document.body.appendChild(overlay);
 
+  // Tab rendering
+  const tabBodies = {
+    general: () => `
+      <div class="space-y-5">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wide mb-3" style="color:#55625f">AI Mode</div>
+          <label class="flex items-center justify-between px-4 py-3.5 rounded-xl border cursor-pointer hover:bg-surface-container transition-colors" style="background:#eff5f2;border-color:#a8b5b2">
+            <div>
+              <div class="text-sm font-semibold" style="color:#293533">Direct API mode</div>
+              <div class="text-xs mt-0.5" style="color:#717d7b">Calls AI APIs directly from the browser with tool use & memory. Active when OpenClaw is offline.</div>
+            </div>
+            <div class="w-10 h-6 rounded-full relative transition-colors ml-4 flex-shrink-0" style="background:${state.agentMode?'#4a6453':'#a8b5b2'}">
+              <div class="w-4 h-4 rounded-full bg-white shadow absolute top-1 transition-all" style="left:${state.agentMode?'22px':'4px'}"></div>
+            </div>
+          </label>
+          <p class="text-[11px] mt-2 px-1" style="color:#a8b5b2">OpenClaw (when connected) always takes priority — this mode activates automatically as a fallback.</p>
+        </div>
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wide mb-3" style="color:#55625f">Data Sources</div>
+          <div id="st-sources" class="space-y-2 mb-2"></div>
+          <div class="flex gap-2">
+            <input id="st-new-source" type="url" placeholder="https://example.com/data" class="flex-1 px-3 py-2 rounded-xl border text-sm outline-none" style="background:#eff5f2;border-color:#a8b5b2;color:#293533"/>
+            <button id="st-add-source" class="px-3 py-2 rounded-xl text-xs font-semibold" style="background:#4a6453;color:#e2ffe8">Add</button>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wide mb-3" style="color:#55625f">Danger Zone</div>
+          <button id="st-reset" class="px-4 py-2.5 rounded-xl border text-xs font-semibold transition-colors hover:bg-red-50" style="border-color:#9f403d;color:#9f403d">Reset all setup data</button>
+        </div>
+      </div>`,
+
+    keys: () => `
+      <div class="space-y-3">
+        <p class="text-xs mb-1" style="color:#717d7b">Keys are stored locally on-device. Only the providers you add keys for will appear in the model picker.</p>
+        ${PROVIDERS.map(p => {
+          const current = localStorage.getItem(p.key) || '';
+          return `
+          <div class="rounded-xl border overflow-hidden" style="border-color:#a8b5b2">
+            <div class="flex items-center gap-3 px-4 py-3" style="background:#eff5f2">
+              <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${p.color}"></div>
+              <div class="flex-1 min-w-0">
+                <div class="text-xs font-bold" style="color:#293533">${p.label}</div>
+                <div class="text-[10px]" style="color:#717d7b">${p.note}</div>
+              </div>
+              ${current ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:#cdead3;color:#3e5746">✓ Set</span>' : ''}
+            </div>
+            <div class="flex gap-2 px-3 py-2.5" style="background:#fff">
+              <input data-provider="${p.id}" type="password" value="${current}" placeholder="${p.placeholder}" class="st-key-input flex-1 px-3 py-2 rounded-lg border text-xs font-mono outline-none" style="border-color:#d1d5db;color:#293533"/>
+              <button data-provider="${p.id}" class="st-key-toggle px-2.5 py-1.5 rounded-lg border text-[10px]" style="border-color:#a8b5b2;color:#55625f">Show</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`,
+
+    memory: () => {
+      const mems = state.memory.slice(0, 50);
+      return `
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold" style="color:#293533">${state.memory.length} memories stored</div>
+            <div class="text-xs mt-0.5" style="color:#717d7b">Facts and preferences saved across conversations</div>
+          </div>
+          ${state.memory.length ? `<button id="st-clear-mem" class="px-3 py-1.5 rounded-lg text-xs font-semibold border hover:bg-red-50 transition-colors" style="border-color:#9f403d;color:#9f403d">Clear all</button>` : ''}
+        </div>
+        <div class="flex gap-2">
+          <input id="st-new-mem" type="text" placeholder="Add a memory manually…" class="flex-1 px-3 py-2 rounded-xl border text-sm outline-none" style="background:#eff5f2;border-color:#a8b5b2;color:#293533"/>
+          <button id="st-add-mem" class="px-3 py-2 rounded-xl text-xs font-semibold" style="background:#4a6453;color:#e2ffe8">Add</button>
+        </div>
+        <div class="space-y-2" id="st-mem-list">
+          ${mems.length ? mems.map(m => `
+            <div class="flex items-start gap-2 px-3 py-2.5 rounded-xl border text-xs" style="background:#eff5f2;border-color:#a8b5b2">
+              <span class="flex-1 leading-relaxed" style="color:#293533">${escapeHtml(m.content)}</span>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <span style="color:#a8b5b2">${timeAgo(m.ts)}</span>
+                <button onclick="window._deleteMem('${m.id}')" class="text-outline-variant hover:text-red-400">✕</button>
+              </div>
+            </div>`).join('') : '<div class="text-center py-6 text-sm" style="color:#a8b5b2">No memories yet. They are saved automatically from conversations.</div>'}
+        </div>
+      </div>`;
+    },
+
+    status: () => `
+      <div class="space-y-4">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wide mb-2" style="color:#55625f">OpenClaw Gateway</div>
+          <div class="flex items-center gap-2 px-4 py-3 rounded-xl border" style="background:#eff5f2;border-color:#a8b5b2">
+            <div id="st-gw-dot" class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#a8b5b2"></div>
+            <span id="st-gw-text" class="text-sm flex-1" style="color:#293533">Checking…</span>
+            <button id="st-gw-restart" class="text-xs px-2.5 py-1.5 rounded-lg" style="background:#4a6453;color:#e2ffe8">Restart</button>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wide mb-2" style="color:#55625f">Browser Relay</div>
+          <div class="flex items-center gap-2 px-4 py-3 rounded-xl border" style="background:#eff5f2;border-color:#a8b5b2">
+            <div id="st-relay-dot" class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:#a8b5b2"></div>
+            <span id="st-relay-text" class="text-sm" style="color:#293533">Checking…</span>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wide mb-2" style="color:#55625f">Direct API</div>
+          <div class="flex items-center gap-2 px-4 py-3 rounded-xl border" style="background:#eff5f2;border-color:#a8b5b2">
+            <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${(localStorage.getItem('biome-key-gemini')||localStorage.getItem('biome-api-key'))?'#4a6453':'#a8b5b2'}"></div>
+            <span class="text-sm" style="color:#293533">${(localStorage.getItem('biome-key-gemini')||localStorage.getItem('biome-api-key'))?'Keys configured — direct mode available':'No keys set — add keys in API Keys tab'}</span>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wide mb-2" style="color:#55625f">Current Model</div>
+          <div class="px-4 py-3 rounded-xl border text-sm font-mono" style="background:#eff5f2;border-color:#a8b5b2;color:#293533">${state.currentModel}</div>
+        </div>
+      </div>`,
+  };
+
+  let activeTab = 'general';
+  function showTab(t) {
+    activeTab = t;
+    document.querySelectorAll('.st-tab').forEach(b => {
+      const active = b.dataset.tab === t;
+      b.style.borderBottomColor = active ? '#4a6453' : 'transparent';
+      b.style.color = active ? '#4a6453' : '#55625f';
+    });
+    document.getElementById('st-body').innerHTML = tabBodies[t]();
+    wireTabBody(t);
+  }
+
+  function wireTabBody(t) {
+    if (t === 'general') {
+      // Sources
+      const renderSrc = () => {
+        const el = document.getElementById('st-sources');
+        if (!el) return;
+        el.innerHTML = (state.customSources || []).map((s, i) => `
+          <div class="flex items-center gap-2 px-3 py-2 rounded-xl border text-xs" style="background:#eff5f2;border-color:#a8b5b2">
+            <span class="truncate flex-1 font-mono" style="color:#293533">${escapeHtml(s.url)}</span>
+            <button onclick="window._stRemoveSrc(${i})" style="color:#9f403d">✕</button>
+          </div>`).join('') || '<div class="text-xs" style="color:#a8b5b2">No sources added.</div>';
+      };
+      window._stRemoveSrc = (i) => { state.customSources.splice(i, 1); renderSrc(); };
+      document.getElementById('st-add-source')?.addEventListener('click', () => {
+        const inp = document.getElementById('st-new-source');
+        const url = inp?.value.trim(); if (!url) return;
+        if (!state.customSources) state.customSources = [];
+        state.customSources.push({ id: Date.now().toString(36), url });
+        inp.value = ''; renderSrc();
+      });
+      renderSrc();
+      document.getElementById('st-reset')?.addEventListener('click', () => {
+        if (confirm('This will clear all setup data, memories, and conversations. Continue?')) window._resetSetup();
+      });
+    }
+
+    if (t === 'keys') {
+      document.querySelectorAll('.st-key-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const inp = document.querySelector(`.st-key-input[data-provider="${btn.dataset.provider}"]`);
+          if (inp) { inp.type = inp.type === 'password' ? 'text' : 'password'; btn.textContent = inp.type === 'password' ? 'Show' : 'Hide'; }
+        });
+      });
+    }
+
+    if (t === 'memory') {
+      document.getElementById('st-clear-mem')?.addEventListener('click', () => {
+        if (confirm('Delete all memories?')) {
+          state.memory = []; localStorage.removeItem('biome-memory'); showTab('memory');
+        }
+      });
+      document.getElementById('st-add-mem')?.addEventListener('click', () => {
+        const inp = document.getElementById('st-new-mem');
+        const val = inp?.value.trim(); if (!val) return;
+        saveMemory(val, 'manual'); inp.value = ''; showTab('memory');
+      });
+      window._deleteMem = (id) => {
+        state.memory = state.memory.filter(m => m.id !== id);
+        localStorage.setItem('biome-memory', JSON.stringify(state.memory));
+        showTab('memory');
+      };
+    }
+
+    if (t === 'status') {
+      // Check gateway
+      (async () => {
+        const dot = document.getElementById('st-gw-dot');
+        const txt = document.getElementById('st-gw-text');
+        if (!dot) return;
+        try {
+          const ws = new WebSocket('ws://127.0.0.1:18789');
+          await new Promise((ok, fail) => { ws.onopen = ok; ws.onerror = fail; setTimeout(fail, 3000); });
+          ws.close();
+          dot.style.background = '#4a6453'; txt.textContent = 'Running on port 18789';
+        } catch { dot.style.background = '#9f403d'; txt.textContent = 'Not running'; }
+      })();
+      (async () => {
+        const dot = document.getElementById('st-relay-dot');
+        const txt = document.getElementById('st-relay-text');
+        if (!dot) return;
+        try {
+          const r = await fetch('http://127.0.0.1:9999/status', { signal: AbortSignal.timeout(3000) });
+          if (r.ok) { dot.style.background = '#4a6453'; txt.textContent = 'Connected on port 9999'; }
+          else throw new Error();
+        } catch { dot.style.background = '#9f403d'; txt.textContent = 'Not connected'; }
+      })();
+      document.getElementById('st-gw-restart')?.addEventListener('click', () => {
+        if (window.webkit?.messageHandlers?.biomeInstall) window.webkit.messageHandlers.biomeInstall.postMessage({ action: 'restart_gateway' });
+        document.getElementById('st-gw-text').textContent = 'Restarting…';
+      });
+    }
+  }
+
+  // Tab click handler
+  document.querySelectorAll('.st-tab').forEach(btn => {
+    btn.addEventListener('click', () => showTab(btn.dataset.tab));
+  });
+
   // Close
-  document.getElementById('settings-close').onclick = () => overlay.remove();
+  document.getElementById('st-close').onclick = () => overlay.remove();
   overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
 
-  // Provider toggle
-  const providerEl = document.getElementById('set-provider');
-  const apiSection = document.getElementById('set-apikey-section');
-  providerEl.onchange = () => {
-    apiSection.style.display = ['ollama', 'plan'].includes(providerEl.value) ? 'none' : '';
-  };
-
-  // Show/hide key
-  const keyInput = document.getElementById('set-apikey');
-  document.getElementById('set-apikey-toggle').onclick = () => {
-    keyInput.type = keyInput.type === 'password' ? 'text' : 'password';
-  };
-
-  // Render custom sources
-  const renderSources = () => {
-    const container = document.getElementById('set-sources');
-    const sources = state.customSources || [];
-    container.innerHTML = sources.map((s, i) => `
-      <div class="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs" style="background:#eff5f2;border-color:#a8b5b2">
-        <span class="truncate flex-1 font-mono" style="color:#293533">${s.url}</span>
-        <button class="text-xs px-1.5 py-0.5 rounded" style="color:#9f403d" onclick="window._removeSource(${i})">✕</button>
-      </div>
-    `).join('');
-  };
-  renderSources();
-
-  window._removeSource = (i) => {
-    (state.customSources || []).splice(i, 1);
-    renderSources();
-  };
-
-  document.getElementById('set-add-source').onclick = () => {
-    const input = document.getElementById('set-new-source');
-    const url = input.value.trim();
-    if (!url) return;
-    if (!state.customSources) state.customSources = [];
-    state.customSources.push({ id: Date.now().toString(36), url });
-    input.value = '';
-    renderSources();
-  };
-
-  // Check gateway
-  const checkGw = async () => {
-    const dot = document.getElementById('set-gw-dot');
-    const status = document.getElementById('set-gw-status');
-    try {
-      const ws = new WebSocket('ws://127.0.0.1:18789');
-      await new Promise((ok, fail) => { ws.onopen = ok; ws.onerror = fail; setTimeout(fail, 3000); });
-      ws.close();
-      dot.style.background = '#4a6453';
-      status.textContent = 'Running on port 18789';
-    } catch {
-      dot.style.background = '#9f403d';
-      status.textContent = 'Not responding';
-    }
-  };
-  checkGw();
-
-  // Check relay
-  const checkRelay = async () => {
-    const dot = document.getElementById('set-relay-dot');
-    const status = document.getElementById('set-relay-status');
-    try {
-      const r = await fetch('http://127.0.0.1:9999/status', { signal: AbortSignal.timeout(3000) });
-      if (r.ok) { dot.style.background = '#4a6453'; status.textContent = 'Connected on port 9999'; }
-      else throw new Error();
-    } catch {
-      dot.style.background = '#9f403d';
-      status.textContent = 'Not connected';
-    }
-  };
-  checkRelay();
-
-  // Gateway restart
-  document.getElementById('set-gw-restart').onclick = async () => {
-    document.getElementById('set-gw-status').textContent = 'Restarting…';
-    if (window.webkit?.messageHandlers?.biomeInstall) {
-      window.webkit.messageHandlers.biomeInstall.postMessage({ action: 'restart_gateway' });
-    }
-    setTimeout(checkGw, 4000);
-  };
-
   // Save
-  document.getElementById('set-save').onclick = () => {
-    localStorage.setItem('biome-provider', providerEl.value);
-    if (!['ollama', 'plan'].includes(providerEl.value)) {
-      localStorage.setItem('biome-api-key', keyInput.value.trim());
-    }
+  document.getElementById('st-save').onclick = () => {
+    // Save API keys from the keys tab inputs
+    document.querySelectorAll('.st-key-input').forEach(inp => {
+      const pid = inp.dataset.provider;
+      const val = inp.value.trim();
+      const p = PROVIDERS.find(x => x.id === pid);
+      if (!p) return;
+      if (val) {
+        localStorage.setItem(p.key, val);
+        if (pid === 'gemini') localStorage.setItem('biome-api-key', val);
+      } else {
+        localStorage.removeItem(p.key);
+      }
+    });
+    // Save sources
     localStorage.setItem('nordic-custom-sources', JSON.stringify(state.customSources || []));
-    document.getElementById('set-saved-msg').classList.remove('hidden');
-    setTimeout(() => document.getElementById('set-saved-msg')?.classList.add('hidden'), 2000);
+    // Save model if changed
+    localStorage.setItem('nordic-model', state.currentModel);
+    const msg = document.getElementById('st-saved');
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 2000);
+    showToast('Settings saved');
   };
+
+  // Show default tab
+  showTab('general');
 }
 
 function renderSidebarPanel() {
@@ -2603,13 +3033,35 @@ function render() {
             <a href="#chat" class="text-lg font-headline tracking-tighter font-semibold transition-all ${state.view === 'chat' ? 'text-[#506A58] dark:text-[#eff5f2] border-b-2 border-[#506A58] pb-1' : 'text-[#a8b5b2] dark:text-[#506a58] hover:text-[#506A58]'}">Chat</a>
             <a href="#mindmap" class="text-lg font-headline tracking-tighter font-semibold transition-all ${state.view === 'mindmap' ? 'text-[#506A58] dark:text-[#eff5f2] border-b-2 border-[#506A58] pb-1' : 'text-[#a8b5b2] dark:text-[#506a58] hover:text-[#506A58]'}">Mindmap</a>
           </nav>
-          <div class="flex items-center gap-4">
-            <button class="p-2 text-[#506A58] hover:bg-[#eff5f2]/50 dark:hover:bg-[#2c3630] rounded-full transition-all scale-95 duration-200 ease-out">
-              <span class="material-symbols-outlined">search</span>
+          <div class="flex items-center gap-2">
+            <button onclick="window._openPalette()" class="p-2 text-[#506A58] hover:bg-[#4a6453]/10 rounded-full transition-all" title="Search (⌘K)">
+              <span class="material-symbols-outlined" style="font-size:20px">search</span>
             </button>
-            <button class="p-2 text-[#506A58] hover:bg-[#eff5f2]/50 dark:hover:bg-[#2c3630] rounded-full transition-all scale-95 duration-200 ease-out">
-              <span class="material-symbols-outlined">more_vert</span>
-            </button>
+            <div class="relative">
+              <button onclick="window._toggleHeaderMenu()" id="header-menu-btn" class="p-2 text-[#506A58] hover:bg-[#4a6453]/10 rounded-full transition-all" title="Menu">
+                <span class="material-symbols-outlined" style="font-size:20px">more_vert</span>
+              </button>
+              ${state.headerMenuOpen ? `
+              <div id="header-menu" class="absolute top-full right-0 mt-1 bg-surface-container-lowest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-50 min-w-[200px]">
+                <div onclick="window._newSession();window._closeHeaderMenu()" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container transition-colors">
+                  <span class="material-symbols-outlined text-primary" style="font-size:17px">add</span>
+                  <span class="text-sm text-on-surface">New chat</span>
+                </div>
+                <div onclick="window._openSettings();window._closeHeaderMenu()" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container transition-colors">
+                  <span class="material-symbols-outlined text-on-surface-variant" style="font-size:17px">settings</span>
+                  <span class="text-sm text-on-surface">Settings</span>
+                </div>
+                <div onclick="window._openMemoryQuick();window._closeHeaderMenu()" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container transition-colors">
+                  <span class="material-symbols-outlined text-on-surface-variant" style="font-size:17px">psychology</span>
+                  <span class="text-sm text-on-surface">Memory (${state.memory?.length || 0})</span>
+                </div>
+                <div class="border-t border-outline-variant/10 my-1"></div>
+                <div onclick="window._resetSetup();window._closeHeaderMenu()" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container transition-colors">
+                  <span class="material-symbols-outlined" style="font-size:17px;color:#9f403d">restart_alt</span>
+                  <span class="text-sm" style="color:#9f403d">Reset setup</span>
+                </div>
+              </div>` : ''}
+            </div>
           </div>
         </div>
       </header>
@@ -3111,6 +3563,11 @@ window._resetMindmap = () => {
 // Model picker
 window._toggleModelPicker = () => { state.modelPickerOpen = !state.modelPickerOpen; state.plusMenuOpen = false; render(); };
 window._togglePlusMenu = () => { state.plusMenuOpen = !state.plusMenuOpen; state.modelPickerOpen = false; render(); };
+window._toggleHeaderMenu = () => { state.headerMenuOpen = !state.headerMenuOpen; state.plusMenuOpen = false; render(); };
+window._closeHeaderMenu = () => { state.headerMenuOpen = false; };
+window._openPalette = () => { state.paletteOpen = true; render(); };
+window._openSettings = () => openSettings();
+window._openMemoryQuick = () => { openSettings(); setTimeout(() => { document.querySelector('[data-tab="memory"]')?.click(); }, 50); };
 window._selectModel = (id) => {
   state.currentModel = id;
   localStorage.setItem('nordic-model', id);
@@ -3162,32 +3619,62 @@ window._saveRecipe = () => {
   render();
   showToast('Recipe saved');
 };
-window._runRecipe = () => {
+window._runRecipe = async () => {
   const recipe = state.recipes.find(r => r.id === state.activeRecipeId);
   if (!recipe || !recipe.nodes.length) { showToast('Add some steps first'); return; }
+
   state.view = 'chat';
   location.hash = '#chat';
   render();
 
-  // Build a rich prompt describing each step with all its configured fields
-  const stepLines = recipe.nodes.map((n, i) => {
-    const t = STEP_TYPES.find(s => s.id === n.type) || STEP_TYPES[STEP_TYPES.length - 1];
-    const fields = n.fields || {};
-    const fieldLines = t.fields
-      .filter(f => fields[f.key]?.trim())
-      .map(f => `  ${f.label}: ${fields[f.key].trim()}`)
-      .join('\n');
-    return `Step ${i + 1} — ${t.label}${fieldLines ? '\n' + fieldLines : ' (no configuration set)'}`;
-  }).join('\n\n');
-
-  const prompt = `Please execute this workflow step by step. For each step, show your work and what you produced before moving to the next.\n\nWorkflow: "${recipe.name}"\n\n${stepLines}\n\nImportant: When a step references {{previous}}, use the actual output of the previous step. Execute all steps in order and summarise the final result at the end.`;
-
-  setTimeout(() => {
+  setTimeout(async () => {
     appendMessage('user', `▶ Run workflow: ${recipe.name}`);
-    gw.chatSend(prompt, state.sessionKey).catch(e => appendMessage('assistant', 'Error: ' + e.message));
-    state.streaming = true;
+    state.streaming = true; updateSendBtn(); updateStreamingMessage();
+
+    let previousOutput = '';
+    const results = [];
+
+    for (let i = 0; i < recipe.nodes.length; i++) {
+      const node = recipe.nodes[i];
+      const stepType = STEP_TYPES.find(s => s.id === node.type) || STEP_TYPES[STEP_TYPES.length - 1];
+      const fields = node.fields || {};
+      setThinkingLabel(`step ${i + 1} of ${recipe.nodes.length}`);
+
+      const fieldText = stepType.fields
+        .filter(f => fields[f.key]?.trim())
+        .map(f => `${f.label}: ${fields[f.key].replace(/\{\{previous\}\}/g, previousOutput).trim()}`)
+        .join('\n');
+
+      const stepPrompt = `You are executing step ${i + 1} of ${recipe.nodes.length} in the workflow "${recipe.name}".\n\nStep type: ${stepType.label}\n${fieldText || 'No configuration set.'}\n\n${previousOutput ? `Output from previous step:\n${previousOutput}\n\n` : ''}Complete this step and provide its output.`;
+
+      try {
+        const msgs = [{ role: 'user', content: stepPrompt }];
+        if (state.connected) {
+          // Use gateway — send and collect response
+          await gw.chatSend(stepPrompt, state.sessionKey + '-wf-' + i);
+          await new Promise(resolve => setTimeout(resolve, 500)); // minimal wait for gateway
+          previousOutput = state.streamText || previousOutput;
+        } else {
+          const res = await callDirectAPI(msgs, []);
+          previousOutput = res.text || '';
+        }
+        results.push({ step: i + 1, label: stepType.label, output: previousOutput });
+      } catch (e) {
+        previousOutput = `Error: ${e.message}`;
+        results.push({ step: i + 1, label: stepType.label, error: e.message });
+      }
+    }
+
+    state.streaming = false;
+    resetThinkingLabel();
     updateSendBtn();
-    updateStreamingMessage();
+    document.getElementById('streaming-msg')?.remove();
+
+    const finalText = results.map(r =>
+      `**Step ${r.step} — ${r.label}**\n${r.error ? `⚠️ ${r.error}` : r.output}`
+    ).join('\n\n---\n\n');
+
+    appendMessage('assistant', `## ✅ Workflow: ${recipe.name}\n\n${finalText}`);
   }, 100);
 };
 
