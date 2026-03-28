@@ -28,10 +28,9 @@ const state = window.__nordicState || {
   paletteOpen: false,
   paletteQuery: '',
   paletteIdx: 0,
-  // ── Arena mode ────────────────────────────────────────────────────────────
+  // ── Arena mode (removed) ─────────────────────────────────────────────────
   arenaMode: false,
-  arenaModels: ['google/gemini-2.0-flash', 'google/gemini-2.5-pro'],
-  arenaResponses: {},   // modelId → { text, done }
+  arenaResponses: {},
   // ── Mindmap mode ─────────────────────────────────────────────────────────
   mindmapNodes: [
     { id: 'center', label: 'OpenClaw', sub: 'Main Chat AI', icon: 'neurology', x: 2500, y: 2500, type: 'center' },
@@ -623,10 +622,10 @@ function deleteConversation(id) {
 
 // ── Model constants + helpers ──────────────────────────────────────────────────
 const MODELS = [
-  { id: 'google/gemini-2.0-flash',      label: 'Gemini 2.0 Flash',  note: 'Fast, cost-efficient',       icon: 'bolt' },
-  { id: 'google/gemini-2.5-pro',        label: 'Gemini 2.5 Pro',    note: 'Best for complex reasoning', icon: 'smart_toy' },
-  { id: 'google/gemini-2.5-flash',      label: 'Gemini 2.5 Flash',  note: 'Balanced speed & quality',   icon: 'electric_bolt' },
-  { id: 'openai/gpt-4o',               label: 'GPT-4o',             note: 'OpenAI · vision ready',      icon: 'psychology_alt' },
+  { id: 'google/gemini-2.0-flash',        label: 'Gemini 2.0 Flash',  note: 'Fast, cost-efficient',       icon: 'bolt' },
+  { id: 'google/gemini-2.5-pro',          label: 'Gemini 2.5 Pro',    note: 'Best for complex reasoning', icon: 'smart_toy' },
+  { id: 'google/gemini-2.5-flash',        label: 'Gemini 2.5 Flash',  note: 'Balanced speed & quality',   icon: 'electric_bolt' },
+  { id: 'google/gemini-2.0-flash-thinking', label: 'Gemini Thinking', note: 'Deep reasoning mode',        icon: 'psychology' },
 ];
 
 function modelLabel(id) { return (MODELS.find(m => m.id === id) || MODELS[0]).label; }
@@ -830,12 +829,12 @@ function saveRecipes() { localStorage.setItem('nordic-recipes', JSON.stringify(s
 function renderRecipesMode() {
   const recipe = state.recipes.find(r => r.id === state.activeRecipeId);
   const nodes = recipe ? recipe.nodes : [];
+
   return `<div class="flex-1 flex flex-col overflow-hidden">
     <!-- Recipes header -->
     <div class="flex items-center gap-3 px-4 py-2.5 border-b border-outline-variant/10 bg-surface-container-low flex-shrink-0">
-      <!-- Recipe selector -->
       <select onchange="window._selectRecipe(this.value)" class="text-xs font-semibold bg-surface-container border border-outline-variant/20 rounded-lg px-2 py-1.5 text-on-surface outline-none cursor-pointer font-headline" style="font-family:Manrope">
-        <option value="">— New Recipe —</option>
+        <option value="">— New Workflow —</option>
         ${state.recipes.map(r => `<option value="${r.id}" ${r.id===state.activeRecipeId?'selected':''}>${escapeHtml(r.name)}</option>`).join('')}
       </select>
       ${recipe ? `<span class="text-[11px] text-on-surface-variant">${nodes.length} step${nodes.length!==1?'s':''}</span>` : ''}
@@ -846,44 +845,80 @@ function renderRecipesMode() {
     </div>
 
     <!-- Workflow canvas -->
-    <div class="dot-grid flex-1 overflow-auto relative" style="background-color:#eff5f2">
-      <div class="flex items-center gap-0 p-8 min-w-max">
+    <div class="flex-1 overflow-auto relative" style="background-color:#eff5f2;background-image:radial-gradient(#d8e5e2 1px, transparent 1px);background-size:28px 28px">
+      <div class="flex items-start gap-0 p-10 min-w-max min-h-full">
         ${nodes.map((node, i) => {
           const t = STEP_TYPES.find(s => s.id === node.type) || STEP_TYPES[6];
+          const STEP_CONFIGS = {
+            search:     { placeholder: 'What to search for…', label: 'Query' },
+            summarise:  { placeholder: 'What to summarise…', label: 'Topic' },
+            draft:      { placeholder: 'What to draft…', label: 'Prompt' },
+            send_slack: { placeholder: '#channel or @user', label: 'Destination' },
+            send_email: { placeholder: 'recipient@example.com', label: 'To' },
+            code:       { placeholder: 'Describe what to run…', label: 'Task' },
+            custom:     { placeholder: 'Describe the action…', label: 'Action' },
+          };
+          const cfg = STEP_CONFIGS[node.type] || STEP_CONFIGS.custom;
           return `
-            <div class="flex items-center gap-0">
-              <div class="flex flex-col items-center gap-1">
-                <div class="text-[9px] font-bold tracking-widest uppercase font-headline" style="color:${t.color};font-family:Manrope">Step ${i+1}</div>
-                <div class="relative bg-white border-2 rounded-xl px-4 py-3 shadow-sm cursor-pointer hover:-translate-y-0.5 hover:shadow-md transition-all min-w-[120px] text-center group" style="border-color:${t.color}20;background:${t.bg}" onclick="window._editRecipeNode('${recipe.id}',${i})">
-                  <div class="flex items-center justify-center gap-1.5 mb-1">
-                    <span class="material-symbols-outlined" style="font-size:14px;color:${t.color}">${t.icon}</span>
-                    <span class="text-xs font-bold font-headline" style="color:${t.color};font-family:Manrope">${t.label}</span>
+            <div class="flex items-center gap-0" draggable="true"
+              ondragstart="window._recipeDragStart(event,${i})"
+              ondragover="event.preventDefault();event.currentTarget.style.opacity='.6'"
+              ondragleave="event.currentTarget.style.opacity='1'"
+              ondrop="event.preventDefault();event.currentTarget.style.opacity='1';window._recipeDrop(event,${i})">
+              <div class="flex flex-col items-center gap-1.5 relative group" style="cursor:grab">
+                <div class="text-[9px] font-bold tracking-widest uppercase font-headline flex items-center gap-1" style="color:${t.color};font-family:Manrope">
+                  <span class="material-symbols-outlined opacity-40 group-hover:opacity-80 transition-opacity" style="font-size:11px;cursor:grab" title="Drag to reorder">drag_indicator</span>
+                  Step ${i+1}
+                </div>
+                <div class="bg-white border-2 rounded-xl shadow-sm min-w-[150px] overflow-hidden" style="border-color:${t.color}30">
+                  <!-- Step header -->
+                  <div class="flex items-center gap-1.5 px-3 py-2" style="background:${t.bg}">
+                    <span class="material-symbols-outlined" style="font-size:15px;color:${t.color}">${t.icon}</span>
+                    <span class="text-[11px] font-bold font-headline flex-1" style="color:${t.color};font-family:Manrope">${t.label}</span>
+                    <!-- Type selector -->
+                    <select onchange="window._changeStepType('${recipe ? recipe.id : ''}',${i},this.value)" class="text-[9px] border-none outline-none bg-transparent cursor-pointer font-semibold" style="color:${t.color};max-width:60px" title="Change step type">
+                      ${STEP_TYPES.map(st => `<option value="${st.id}" ${st.id===node.type?'selected':''}>${st.label}</option>`).join('')}
+                    </select>
+                    <button onclick="window._removeRecipeNode('${recipe ? recipe.id : ''}',${i})" class="opacity-0 group-hover:opacity-100 transition-opacity text-red-300 hover:text-red-500 ml-0.5" title="Remove step">
+                      <span class="material-symbols-outlined" style="font-size:13px">close</span>
+                    </button>
                   </div>
-                  ${node.config ? `<div class="text-[10px] text-on-surface-variant truncate max-w-[100px]">${escapeHtml(node.config)}</div>` : ''}
-                  <button onclick="event.stopPropagation();window._removeRecipeNode('${recipe.id}',${i})" class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-400 text-white items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" style="display:flex;font-size:9px">✕</button>
+                  <!-- Inline config input -->
+                  <div class="px-3 py-2">
+                    <div class="text-[9px] font-bold text-outline-variant uppercase tracking-wide mb-1" style="font-family:Manrope">${cfg.label}</div>
+                    <textarea
+                      placeholder="${cfg.placeholder}"
+                      rows="2"
+                      class="w-full text-[11px] text-on-surface bg-surface-container-low border border-outline-variant/15 rounded-lg px-2 py-1.5 resize-none outline-none focus:border-primary/30 transition-colors font-body leading-relaxed"
+                      style="min-width:130px"
+                      onchange="window._updateStepConfig('${recipe ? recipe.id : ''}',${i},this.value)"
+                      oninput="window._updateStepConfig('${recipe ? recipe.id : ''}',${i},this.value)"
+                    >${escapeHtml(node.config || '')}</textarea>
+                  </div>
                 </div>
               </div>
-              ${i < nodes.length - 1 ? `<div class="flex items-center px-2 text-outline-variant"><span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span></div>` : ''}
+              ${i < nodes.length - 1 ? `<div class="flex items-center px-2 pt-5 text-outline-variant flex-shrink-0"><span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></div>` : ''}
             </div>`;
         }).join('')}
+        <!-- Connector arrow before add button (only if nodes exist) -->
+        ${nodes.length > 0 ? `<div class="flex items-center px-2 pt-5 text-outline-variant flex-shrink-0"><span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></div>` : ''}
         <!-- Add step button -->
-        ${nodes.length > 0 ? `<div class="flex items-center px-2 text-outline-variant"><span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span></div>` : ''}
-        <div onclick="window._addRecipeStep()" class="border-2 border-dashed border-outline-variant/40 rounded-xl px-5 py-3 cursor-pointer hover:border-primary/40 hover:bg-surface-container transition-all text-center min-w-[100px]" style="margin-top:${nodes.length?'20px':'0'}">
-          <span class="material-symbols-outlined text-outline-variant" style="font-size:20px">add</span>
-          <div class="text-[10px] font-bold text-outline-variant font-headline" style="font-family:Manrope">Add step</div>
+        <div onclick="window._addRecipeStep()" class="border-2 border-dashed border-outline-variant/40 rounded-xl px-5 py-4 cursor-pointer hover:border-primary/40 hover:bg-surface-container/60 transition-all text-center min-w-[110px] mt-6 self-center">
+          <span class="material-symbols-outlined text-outline-variant" style="font-size:22px">add</span>
+          <div class="text-[10px] font-bold text-outline-variant font-headline mt-0.5" style="font-family:Manrope">Add step</div>
         </div>
       </div>
       ${!nodes.length ? `<div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span class="material-symbols-outlined text-outline-variant/30" style="font-size:48px">account_tree</span>
-        <p class="text-sm text-outline-variant/50 mt-3 font-medium">Select a recipe or create one by adding steps</p>
+        <span class="material-symbols-outlined text-outline-variant/25" style="font-size:52px">account_tree</span>
+        <p class="text-sm text-outline-variant/40 mt-3 font-medium text-center max-w-xs">Build a workflow by adding steps below.<br/>Each step passes its output to the next.</p>
       </div>` : ''}
     </div>
 
     <!-- Step type palette -->
     <div class="flex-shrink-0 px-4 py-2.5 border-t border-outline-variant/10 bg-surface-container-low">
       <div class="flex items-center gap-1.5 overflow-x-auto">
-        <span class="text-[10px] font-bold text-outline-variant font-headline shrink-0 mr-1" style="font-family:Manrope">Steps:</span>
-        ${STEP_TYPES.map(t => `<button onclick="window._quickAddStep('${t.id}')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[10px] font-semibold font-headline whitespace-nowrap hover:opacity-80 transition-opacity shrink-0" style="background:${t.bg};border-color:${t.color}30;color:${t.color};font-family:Manrope">
+        <span class="text-[10px] font-bold text-outline-variant font-headline shrink-0 mr-1" style="font-family:Manrope">Add:</span>
+        ${STEP_TYPES.map(t => `<button onclick="window._quickAddStep('${t.id}')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[10px] font-semibold font-headline whitespace-nowrap hover:opacity-80 active:scale-95 transition-all shrink-0" style="background:${t.bg};border-color:${t.color}30;color:${t.color};font-family:Manrope">
           <span class="material-symbols-outlined" style="font-size:12px">${t.icon}</span>${t.label}
         </button>`).join('')}
       </div>
@@ -1748,41 +1783,40 @@ function openSettings() {
 function renderSidebarPanel() {
   const el = document.getElementById('sidebar-panel-content');
   if (!el) return;
-  const items = state.sessions.length
-    ? state.sessions.map(s => {
-      const CLIENT_NAMES = ['taiga', 'openclaw', 'arboretum'];
-      const isClientName = t => CLIENT_NAMES.includes((t || '').toLowerCase().trim());
-      const firstUserText = extractText(
-        s.firstMessage?.role === 'user' ? (s.firstMessage?.content || s.firstMessage?.text) :
-          s.lastMessage?.role === 'user' ? (s.lastMessage?.content || s.lastMessage?.text) : ''
-      );
-      const candidates = [
-        !isClientName(s.derivedTitle) ? s.derivedTitle : null,
-        !isClientName(s.label) ? s.label : null,
-        firstUserText,
-        extractText(s.lastMessage?.content || s.lastMessage?.text || ''),
-      ].filter(Boolean);
-      let rawTitle = candidates.find(c => {
-        const cl = c.trim();
-        return cl.length > 3 && !cl.startsWith('{') && !cl.startsWith('[') && !cl.includes('```') && !cl.startsWith('Sender') && !isClientName(cl);
-      }) || s.key || 'Untitled';
-      rawTitle = rawTitle.replace(/```[\s\S]*?```/g, '').replace(/`[^`]+`/g, '').trim();
-      rawTitle = rawTitle.split('\n').map(l => l.trim()).find(l => l.length > 3 && !/^[{[\(]/.test(l) && !l.startsWith('Sender')) || rawTitle;
-      rawTitle = rawTitle.replace(/^[^a-zA-Z0-9"'(\u00C0-\u024F]+/, '').replace(/\*\*/g, '').trim();
-      const title = rawTitle.slice(0, 60) || 'Untitled';
-      const key = s.key || s.sessionKey || s.id || '';
-      const active = key === state.sessionKey;
 
-      return `
-          <a class="flex items-center gap-3 px-4 py-2 rounded-lg transition-transform duration-300 ease-in-out cursor-pointer ${active ? 'bg-[#fbfdfc] dark:bg-[#2c3630] text-[#506A58] font-bold shadow-sm' : 'text-[#506A58]/70 dark:text-[#a8b5b2] hover:bg-[#fbfdfc]/60 dark:hover:bg-[#2c3630]/50'}" onclick="window._selectSession('${escapeHtml(key)}')">
-            <span class="material-symbols-outlined shrink-0 text-[18px]" style="${active ? 'font-variation-settings:\'FILL\' 1;' : ''}">chat_bubble</span>
-            <span class="truncate font-inter text-sm sidebar-item-text">${escapeHtml(title)}</span>
-          </a>
-        `;
-    }).join('')
-    : '<div class="text-xs text-slate-400 px-3 py-4 text-center sidebar-item-text">No recent sessions</div>';
+  const convs = state.conversations.slice(0, 50);
+  if (!convs.length) {
+    el.innerHTML = '<div class="text-[11px] text-on-surface-variant/50 text-center py-8 px-2">No conversations yet.<br/>Start chatting to save history.</div>';
+    return;
+  }
 
-  el.innerHTML = items;
+  // Group by relative date
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+  const groups = [
+    { label: 'Today',     items: [] },
+    { label: 'Yesterday', items: [] },
+    { label: 'Earlier',   items: [] },
+  ];
+  for (const c of convs) {
+    const d = new Date(c.updatedAt); d.setHours(0,0,0,0);
+    if (d >= today) groups[0].items.push(c);
+    else if (d >= yesterday) groups[1].items.push(c);
+    else groups[2].items.push(c);
+  }
+
+  el.innerHTML = groups.filter(g => g.items.length).map(g => `
+    <div class="pt-3 pb-1">
+      <div class="px-4 text-[9px] font-bold uppercase tracking-widest text-outline-variant/60 mb-1 sidebar-item-text">${g.label}</div>
+      ${g.items.map(c => `
+        <div onclick="loadConversation('${c.id}')" class="sidebar-item-padding group flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer hover:bg-[#fbfdfc]/60 transition-colors ${c.id === state.activeConvId ? 'bg-[#fbfdfc] text-[#506A58] font-semibold shadow-sm' : 'text-[#506A58]/70'}">
+          <span class="material-symbols-outlined shrink-0 text-base" style="${c.id === state.activeConvId ? "font-variation-settings:'FILL' 1;" : ''}">chat_bubble</span>
+          <span class="flex-1 text-xs truncate sidebar-item-text">${escapeHtml(c.title)}</span>
+          <button onclick="event.stopPropagation();deleteConversation('${c.id}')" class="opacity-0 group-hover:opacity-100 shrink-0 p-0.5 rounded text-outline-variant hover:text-red-400 transition-all sidebar-item-text" title="Delete">
+            <span class="material-symbols-outlined" style="font-size:13px">close</span>
+          </button>
+        </div>`).join('')}
+    </div>`).join('');
 }
 
 // ── Mindmap pan/zoom/drag ─────────────────────────────────────────────────────
@@ -2057,9 +2091,6 @@ function renderChat() {
                   <span class="material-symbols-outlined text-outline-variant hover:text-on-surface-variant" style="font-size:17px">attach_file</span>
                 </label>
                 <input id="file-input-hero" type="file" class="hidden" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.py,.html,.css"/>
-                <button onclick="window._toggleArena()" class="flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container border border-outline-variant/15 text-[10px] font-semibold text-on-surface-variant hover:bg-surface-container-high transition-colors font-headline" style="font-family:Manrope" title="Compare models side by side">
-                  <span class="material-symbols-outlined" style="font-size:12px">compare</span> Arena
-                </button>
               </div>
               <div class="flex gap-5">
                 <button class="text-xs text-on-surface-variant hover:text-primary transition-colors" onclick="window._sendPrompt('Synthesize quarterly reports')">Synthesize quarterly reports</button>
@@ -2087,7 +2118,7 @@ function renderChat() {
             ${renderAttachmentStrip()}
             <div class="flex items-center gap-2 px-3 py-2">
               <input id="chat-input" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant/50 py-1.5 px-1 font-body text-sm" placeholder="Message Taiga..." type="text" autocomplete="off" />
-              <label for="file-input" class="cursor-pointer p-1.5 hover:bg-surface-container rounded-lg transition-colors shrink-0" title="Attach file">
+              <label for="file-input" class="cursor-pointer p-1.5 hover:bg-surface-container rounded-lg transition-colors shrink-0" title="Attach file (or drag & drop)">
                 <span class="material-symbols-outlined text-outline-variant hover:text-on-surface-variant" style="font-size:17px">attach_file</span>
               </label>
               <input id="file-input" type="file" class="hidden" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.py,.html,.css"/>
@@ -2095,12 +2126,9 @@ function renderChat() {
                 <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1">send</span>
               </button>
             </div>
-            <div class="flex items-center gap-2 px-3 pb-2">
+            <div class="flex items-center gap-2 px-3 pb-2 border-t border-outline-variant/8 pt-1.5">
               ${renderModelPicker()}
-              <button onclick="window._toggleArena()" class="flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container border border-outline-variant/15 text-[10px] font-semibold text-on-surface-variant hover:bg-surface-container-high transition-colors font-headline" style="font-family:Manrope" title="Compare models side by side">
-                <span class="material-symbols-outlined" style="font-size:12px">compare</span> Arena
-              </button>
-              <span class="text-[9px] text-outline-variant/50 ml-auto">⌘K commands</span>
+              <span class="text-[9px] text-outline-variant/40 ml-auto">⌘K</span>
             </div>
           </div>
         </div>
@@ -2388,6 +2416,11 @@ window._newSession = () => {
   state.sessionKey = _freshSessionKey();
   state.messages = []; state.streamText = ''; state.streaming = false;
   state.sidebarPanel = null;
+  state.activeConvId = null;
+  state.attachments = [];
+  state.canvasOpen = false;
+  state.artifacts = [];
+  localStorage.removeItem('nordic-active-conv');
   render();
   showToast('New session started');
 };
@@ -2833,38 +2866,8 @@ window._paletteSelect = (i) => {
   }
 };
 
-// Arena
-window._toggleArena = () => { state.arenaMode = !state.arenaMode; state.arenaResponses = {}; render(); };
-window._arenaSend = () => {
-  const input = document.getElementById('arena-input');
-  const prompt = input?.value?.trim();
-  if (!prompt) return;
-  if (input) input.value = '';
-  document.getElementById('arena-input-val')?.setAttribute('value', prompt);
-  state.arenaResponses = {};
-  const arenaBody = document.getElementById('arena-body');
-  if (arenaBody) arenaBody.innerHTML = arenaBodyHTML(prompt);
-  ARENA_MODELS.forEach(m => arenaCall(m.id, prompt));
-};
-window._arenaUse = (modelId) => {
-  const resp = state.arenaResponses[modelId];
-  if (!resp?.text) return;
-  state.arenaMode = false;
-  state.view = 'chat';
-  location.hash = '#chat';
-  render();
-  setTimeout(() => appendMessage('assistant', resp.text), 100);
-};
-window._arenaContinue = (modelId) => {
-  const resp = state.arenaResponses[modelId];
-  if (!resp?.text) return;
-  state.arenaMode = false;
-  state.currentModel = ARENA_MODELS.find(m => m.id === modelId) ? 'google/' + modelId : state.currentModel;
-  state.view = 'chat';
-  location.hash = '#chat';
-  appendMessage('assistant', resp.text);
-  render();
-};
+// Arena removed — kept as stub so old references don't crash
+window._toggleArena = () => { showToast('Arena mode removed'); };
 
 // Recipes / Workflow
 window._setMindmapMode = (mode) => { state.mindmapMode = mode; render(); if (mode === 'skills') requestAnimationFrame(() => { initMindmap(); updateMindmapLines(); }); };
@@ -2915,6 +2918,29 @@ window._editRecipeNode = (recipeId, idx) => {
 window._removeRecipeNode = (recipeId, idx) => {
   const recipe = state.recipes.find(r => r.id === recipeId);
   if (recipe) { recipe.nodes.splice(idx, 1); saveRecipes(); render(); }
+};
+window._changeStepType = (recipeId, idx, newType) => {
+  const recipe = state.recipes.find(r => r.id === recipeId);
+  if (recipe && recipe.nodes[idx]) { recipe.nodes[idx].type = newType; recipe.nodes[idx].config = ''; saveRecipes(); render(); }
+};
+window._updateStepConfig = (recipeId, idx, val) => {
+  const recipe = state.recipes.find(r => r.id === recipeId);
+  if (recipe && recipe.nodes[idx]) { recipe.nodes[idx].config = val; }
+  // Don't re-render on every keystroke — just save debounced
+  clearTimeout(window.__recipeSaveTimer);
+  window.__recipeSaveTimer = setTimeout(() => saveRecipes(), 600);
+};
+// Drag-and-drop reorder
+window._recipeDragStart = (e, idx) => { e.dataTransfer.setData('text/plain', String(idx)); };
+window._recipeDrop = (e, targetIdx) => {
+  const fromIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+  if (isNaN(fromIdx) || fromIdx === targetIdx) return;
+  const recipe = state.recipes.find(r => r.id === state.activeRecipeId);
+  if (!recipe) return;
+  const [moved] = recipe.nodes.splice(fromIdx, 1);
+  recipe.nodes.splice(targetIdx, 0, moved);
+  saveRecipes();
+  render();
 };
 
 // Canvas
