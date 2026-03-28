@@ -32,6 +32,8 @@ const state = window.__nordicState || {
   thinkingLabel: 'thinking',
   // Custom data sources
   customSources: JSON.parse(localStorage.getItem('nordic-custom-sources') || '[]'),
+  // Custom tools (MCP servers, API endpoints)
+  customTools: JSON.parse(localStorage.getItem('nordic-custom-tools') || '[]'),
 };
 window.__nordicState = state;
 
@@ -351,7 +353,7 @@ gw.on('chat', (payload) => {
     resetThinkingLabel();
     if (state.pendingSkillRefresh) {
       state.pendingSkillRefresh = false;
-      setTimeout(() => loadSkills(), 3000);
+      setTimeout(() => { loadSkills(); showToast('Mindmap updated'); }, 3000);
       setTimeout(() => loadSkills(), 10000);
     }
 
@@ -399,6 +401,7 @@ const CAT_META = {
   default: { label: 'Tools', border: '#496250', bg: '#f0fdf4', line: '#86efac', icon: 'build' },
   presence: { label: 'Connected', border: '#f97316', bg: '#fff7ed', line: '#fb923c', icon: 'computer' },
   sources: { label: 'Data Sources', border: '#0ea5e9', bg: '#f0f9ff', line: '#38bdf8', icon: 'link' },
+  tools: { label: 'Tools & APIs', border: '#7c3aed', bg: '#f5f3ff', line: '#a78bfa', icon: 'build' },
 };
 
 function skillCategory(name, description) {
@@ -632,6 +635,9 @@ async function loadSkills() {
     // Custom data sources node
     addCustomSourcesNode(center, catKeys.length);
 
+    // Custom tools node
+    addCustomToolsNode(center, catKeys.length);
+
     // Presence nodes (Claude Code etc)
     addPresenceNodes(center);
     state.skillsLoaded = true;
@@ -711,6 +717,52 @@ function addCustomSourcesNode(center, catCount) {
   }
 }
 
+function addCustomToolsNode(center, catCount) {
+  const tools = state.customTools || [];
+  const meta = CAT_META.tools;
+  const angle = -Math.PI / 4; // top-right, opposite to sources
+  const radius = 300;
+  const nodeId = 'cat-tools';
+  const expanded = !!state.expandedCategories[nodeId];
+  const nx = center.x + Math.cos(angle + (catCount * 0.15)) * radius;
+  const ny = center.y + Math.sin(angle + (catCount * 0.15)) * radius;
+
+  state.mindmapNodes.push({
+    id: nodeId,
+    type: 'category',
+    cat: 'tools',
+    label: meta.label,
+    icon: meta.icon,
+    skills: [],
+    tools,
+    expanded,
+    count: tools.length,
+    isToolsNode: true,
+    x: nx,
+    y: ny,
+  });
+
+  if (expanded && tools.length) {
+    const subRadius = Math.min(160, 80 + tools.length * 20);
+    tools.forEach((tool, j) => {
+      const a = (Math.PI * 2 / tools.length) * j - Math.PI / 2;
+      state.mindmapNodes.push({
+        id: 'tool-' + tool.id,
+        type: 'subcategory',
+        cat: 'tools',
+        parentId: nodeId,
+        label: tool.label || tool.name,
+        sub: (tool.type === 'mcp' ? 'MCP Server' : tool.type === 'api' ? 'API Endpoint' : 'Tool').slice(0, 36),
+        emoji: '',
+        icon: tool.type === 'mcp' ? 'hub' : tool.type === 'api' ? 'api' : 'build',
+        toolId: tool.id,
+        x: nx + Math.cos(a) * subRadius - 80,
+        y: ny + Math.sin(a) * subRadius - 28,
+      });
+    });
+  }
+}
+
 function toggleCategoryExpand(catId) {
   const node = state.mindmapNodes.find(n => n.id === catId);
   if (!node) return;
@@ -723,7 +775,35 @@ function toggleCategoryExpand(catId) {
 
   // Add sub-nodes if expanding
   if (newExpanded) {
-    addSubNodes(catId, node.skills, node.x, node.y, node.cat);
+    if (node.isSourcesNode) {
+      // Re-add source sub-nodes
+      const sources = state.customSources || [];
+      const subRadius = Math.min(160, 80 + sources.length * 20);
+      sources.forEach((src, j) => {
+        const a = (Math.PI * 2 / sources.length) * j - Math.PI / 2;
+        state.mindmapNodes.push({
+          id: 'src-' + src.id, type: 'subcategory', cat: 'sources', parentId: catId,
+          label: src.label || new URL(src.url).hostname, sub: src.url.slice(0, 36),
+          emoji: '🔗', icon: 'link', sourceId: src.id,
+          x: node.x + Math.cos(a) * subRadius - 80, y: node.y + Math.sin(a) * subRadius - 28,
+        });
+      });
+    } else if (node.isToolsNode) {
+      // Re-add tool sub-nodes
+      const tools = state.customTools || [];
+      const subRadius = Math.min(160, 80 + tools.length * 20);
+      tools.forEach((tool, j) => {
+        const a = (Math.PI * 2 / tools.length) * j - Math.PI / 2;
+        state.mindmapNodes.push({
+          id: 'tool-' + tool.id, type: 'subcategory', cat: 'tools', parentId: catId,
+          label: tool.label || tool.name, sub: (tool.type === 'mcp' ? 'MCP Server' : tool.type === 'api' ? 'API Endpoint' : 'Tool').slice(0, 36),
+          emoji: '', icon: tool.type === 'mcp' ? 'hub' : tool.type === 'api' ? 'api' : 'build', toolId: tool.id,
+          x: node.x + Math.cos(a) * subRadius - 80, y: node.y + Math.sin(a) * subRadius - 28,
+        });
+      });
+    } else {
+      addSubNodes(catId, node.skills, node.x, node.y, node.cat);
+    }
   }
 
   // Re-render nodes layer
@@ -938,24 +1018,33 @@ const SESSION_PRIMER =
 
 function buildMessageWithContext(userText) {
   const sources = state.customSources || [];
+  const tools = state.customTools || [];
   const mandate = RESPONSE_MANDATE;
-  // First message in session gets a system primer so Gemini knows the rules from the start
   const primer = state.messages.length === 0 ? SESSION_PRIMER : '';
 
-  if (!sources.length) return primer + userText + mandate;
+  if (!sources.length && !tools.length) return primer + userText + mandate;
 
-  const list = sources.map(s => {
-    try {
-      const host = new URL(s.url).hostname;
-      return `  • ${s.label || host}: ${s.url}${s.description ? ' (' + s.description + ')' : ''}`;
-    } catch { return null; }
-  }).filter(Boolean).join('\n');
+  let context = '';
 
-  return `${primer}Note: I have the following personal data sources set up. For questions about these topics, navigate directly to the relevant URL and read the content. For other live data, use web search or claude.ai as a fallback:
+  if (sources.length) {
+    const list = sources.map(s => {
+      try {
+        const host = new URL(s.url).hostname;
+        return `  • ${s.label || host}: ${s.url}${s.description ? ' (' + s.description + ')' : ''}`;
+      } catch { return null; }
+    }).filter(Boolean).join('\n');
+    context += `Note: I have the following personal data sources set up. For questions about these topics, navigate directly to the relevant URL and read the content:\n\n${list}\n\n`;
+  }
 
-${list}
+  if (tools.length) {
+    const toolList = tools.map(t => {
+      const typeLabel = t.type === 'mcp' ? 'MCP Server' : t.type === 'api' ? 'API Endpoint' : 'Command';
+      return `  • ${t.name} (${typeLabel}): ${t.endpoint}${t.description ? ' — ' + t.description : ''}`;
+    }).join('\n');
+    context += `I have the following tools configured. When relevant, use them to complete tasks:\n\n${toolList}\n\n`;
+  }
 
-My question: ${userText}${mandate}`;
+  return `${primer}${context}My question: ${userText}${mandate}`;
 }
 
 async function sendMessage(text) {
@@ -1412,10 +1501,18 @@ function onMindmapMouseUp() {
       } else {
         toggleCategoryExpand(nodeId);
       }
+    } else if (node?.type === 'category' && node?.isToolsNode) {
+      if ((state.customTools || []).length === 0) {
+        window._showAddToolModal();
+      } else {
+        toggleCategoryExpand(nodeId);
+      }
     } else if (node?.type === 'category') {
       toggleCategoryExpand(nodeId);
     } else if (node?.sourceId) {
       window._showAddSourceModal(node.sourceId);
+    } else if (node?.toolId) {
+      window._showAddToolModal(node.toolId);
     } else if (node?.skillKey) {
       state.selectedSkillKey = state.selectedSkillKey === node.skillKey ? null : node.skillKey;
       document.getElementById('skill-panel')?.remove();
@@ -1666,6 +1763,9 @@ function renderMindmap() {
         <button onclick="window._showAddSourceModal()" class="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-sm hover:border-sky-400/40 hover:shadow-md transition-all text-sm text-secondary font-medium">
           <span class="material-symbols-outlined text-sm">link</span> Add Source
         </button>
+        <button onclick="window._showAddToolModal()" class="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-sm hover:border-purple-400/40 hover:shadow-md transition-all text-sm text-secondary font-medium">
+          <span class="material-symbols-outlined text-sm">build</span> Add Tool
+        </button>
       </div>
 
       <!-- Monitor -->
@@ -1847,7 +1947,7 @@ window._openHistory = () => openHistory();
 window._openHelp = () => openHelp();
 window._openSettings = () => openSettings();
 // DEV ONLY — remove before release
-window._resetSetup = () => { Object.keys(localStorage).filter(k => k.startsWith('biome')).forEach(k => localStorage.removeItem(k)); location.reload(); };
+window._resetSetup = () => { Object.keys(localStorage).filter(k => k.startsWith('biome') || k.startsWith('nordic')).forEach(k => localStorage.removeItem(k)); location.reload(); };
 window._selectSession = (key) => { state.sessionKey = key; state.messages = []; state.sidebarPanel = null; render(); if (state.connected) loadHistory(); };
 window._toggleMonitor = () => { state.monitorOpen = !state.monitorOpen; if (state.monitorOpen) loadPresence(); render(); };
 window._closeSkillPanel = () => { state.selectedSkillKey = null; document.getElementById('skill-panel')?.remove(); };
@@ -2128,6 +2228,99 @@ window._deleteSource = (id) => {
   saveCustomSources();
   document.getElementById('source-modal')?.remove();
   showToast('Source removed');
+  loadSkills();
+};
+
+// ── Custom Tools (MCP Servers, API Endpoints) ─────────────────────────────────
+function saveCustomTools() {
+  localStorage.setItem('nordic-custom-tools', JSON.stringify(state.customTools));
+}
+
+window._showAddToolModal = (editId) => {
+  const existing = editId ? (state.customTools || []).find(t => t.id === editId) : null;
+  const modal = document.createElement('div');
+  modal.id = 'tool-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  modal.innerHTML = `
+    <div style="background:white;border-radius:16px;padding:24px;width:440px;max-width:92vw;box-shadow:0 24px 64px rgba(0,0,0,.15)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+        <div style="width:36px;height:36px;background:linear-gradient(135deg,#7c3aed,#a78bfa);border-radius:10px;display:flex;align-items:center;justify-content:center">
+          <span class="material-symbols-outlined" style="color:white;font-size:18px">build</span>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:14px;color:#0f172a">${existing ? 'Edit Tool' : 'Add Tool'}</div>
+          <div style="font-size:11px;color:#737972">Connect an MCP server or API endpoint for your agent to use</div>
+        </div>
+        <button onclick="document.getElementById('tool-modal').remove()" style="margin-left:auto;padding:4px;border-radius:6px;border:none;background:none;cursor:pointer;color:#94a3b8">
+          <span class="material-symbols-outlined" style="font-size:18px">close</span></button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Tool Type</label>
+          <select id="tool-type" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #e0e3e5;border-radius:8px;font-size:13px;outline:none;font-family:inherit;color:#0f172a;background:white">
+            <option value="mcp" ${existing?.type === 'mcp' ? 'selected' : ''}>MCP Server</option>
+            <option value="api" ${existing?.type === 'api' ? 'selected' : ''}>API Endpoint</option>
+            <option value="command" ${existing?.type === 'command' ? 'selected' : ''}>Shell Command</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Name</label>
+          <input id="tool-name" type="text" placeholder="e.g. Slack, GitHub, My API" value="${escapeHtml(existing?.name || '')}"
+            style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #e0e3e5;border-radius:8px;font-size:13px;outline:none;font-family:inherit;color:#0f172a" autofocus/>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Endpoint / Command</label>
+          <input id="tool-endpoint" type="text" placeholder="e.g. npx @slack/mcp-server or https://api.example.com" value="${escapeHtml(existing?.endpoint || '')}"
+            style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #e0e3e5;border-radius:8px;font-size:13px;outline:none;font-family:monospace;color:#0f172a"/>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:4px">API Key / Token <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+          <input id="tool-apikey" type="password" placeholder="Bearer token or API key" value="${escapeHtml(existing?.apiKey || '')}"
+            style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #e0e3e5;border-radius:8px;font-size:13px;outline:none;font-family:monospace;color:#0f172a"/>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:#475569;display:block;margin-bottom:4px">Description <span style="font-weight:400;color:#94a3b8">(helps the AI know when to use it)</span></label>
+          <textarea id="tool-desc" placeholder="e.g. Sends messages to Slack channels" rows="2"
+            style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #e0e3e5;border-radius:8px;font-size:13px;outline:none;resize:none;font-family:inherit;color:#0f172a">${escapeHtml(existing?.description || '')}</textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:18px">
+        ${existing ? `<button onclick="window._deleteTool('${existing.id}')" style="padding:10px 14px;border:1.5px solid #fee2e2;border-radius:8px;background:none;cursor:pointer;font-size:13px;font-weight:500;color:#ef4444">Delete</button>` : ''}
+        <button onclick="document.getElementById('tool-modal').remove()" style="flex:1;padding:10px;border:1.5px solid #e0e3e5;border-radius:8px;background:none;cursor:pointer;font-size:13px;font-weight:500;color:#737972">Cancel</button>
+        <button onclick="window._saveTool('${existing?.id || ''}')" style="flex:2;padding:10px;border:none;border-radius:8px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;cursor:pointer;font-size:13px;font-weight:600">${existing ? 'Save Changes' : 'Add Tool'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  modal.querySelector('#tool-name').focus();
+};
+
+window._saveTool = (editId) => {
+  const name = document.getElementById('tool-name')?.value?.trim();
+  if (!name) { showToast('Please enter a tool name'); return; }
+  const type = document.getElementById('tool-type')?.value || 'mcp';
+  const endpoint = document.getElementById('tool-endpoint')?.value?.trim();
+  if (!endpoint) { showToast('Please enter an endpoint or command'); return; }
+  const apiKey = document.getElementById('tool-apikey')?.value?.trim();
+  const description = document.getElementById('tool-desc')?.value?.trim();
+  if (editId) {
+    const idx = (state.customTools || []).findIndex(t => t.id === editId);
+    if (idx !== -1) state.customTools[idx] = { ...state.customTools[idx], name, type, endpoint, apiKey, description, label: name };
+  } else {
+    if (!state.customTools) state.customTools = [];
+    state.customTools.push({ id: crypto.randomUUID(), name, label: name, type, endpoint, apiKey, description });
+  }
+  saveCustomTools();
+  document.getElementById('tool-modal')?.remove();
+  showToast(editId ? 'Tool updated' : 'Tool added');
+  loadSkills(); // re-render mindmap
+};
+
+window._deleteTool = (id) => {
+  state.customTools = (state.customTools || []).filter(t => t.id !== id);
+  saveCustomTools();
+  document.getElementById('tool-modal')?.remove();
+  showToast('Tool removed');
   loadSkills();
 };
 
