@@ -860,14 +860,88 @@ function renderArena() {
 }
 
 // ── Recipe / Workflow builder (Mindmap mode) ───────────────────────────────────
+// ── Workflow step definitions ──────────────────────────────────────────────────
+// Each step has typed fields — users can fully configure what the AI does.
+// {{previous}} in any field value refers to the output of the prior step.
 const STEP_TYPES = [
-  { id:'search',    label:'Web Search',    icon:'search',      color:'#3b82f6', bg:'#eff6ff' },
-  { id:'summarise', label:'Summarise',     icon:'psychology',  color:'#4a6453', bg:'#f0fdf4' },
-  { id:'draft',     label:'Draft',         icon:'edit_note',   color:'#8b5cf6', bg:'#f5f3ff' },
-  { id:'send_slack',label:'Send to Slack', icon:'chat',        color:'#e11d48', bg:'#fff1f2' },
-  { id:'send_email',label:'Send Email',    icon:'mail',        color:'#0ea5e9', bg:'#f0f9ff' },
-  { id:'code',      label:'Run Code',      icon:'terminal',    color:'#374151', bg:'#f9fafb' },
-  { id:'custom',    label:'Custom Tool',   icon:'build',       color:'#7c3aed', bg:'#f5f3ff' },
+  {
+    id: 'prompt', label: 'AI Prompt', icon: 'psychology', color: '#4a6453', bg: '#f0fdf4',
+    hint: 'A freeform instruction to the AI — the most flexible step type.',
+    fields: [
+      { key: 'instruction', label: 'Instruction', type: 'textarea', rows: 3,
+        placeholder: 'Summarise {{previous}} into 5 bullet points…\nor\nList the key action items from {{previous}}…' },
+    ]
+  },
+  {
+    id: 'search', label: 'Web Search', icon: 'search', color: '#3b82f6', bg: '#eff6ff',
+    hint: 'Search the web for specific information, then do something with the results.',
+    fields: [
+      { key: 'query',       label: 'What to search for', type: 'textarea', rows: 2,
+        placeholder: 'latest AI funding news this week\nor use {{previous}} to search based on previous step output' },
+      { key: 'instruction', label: 'What to do with results', type: 'textarea', rows: 2,
+        placeholder: 'Summarise the top 3 results and highlight any pricing information' },
+    ]
+  },
+  {
+    id: 'draft', label: 'Write / Draft', icon: 'edit_note', color: '#8b5cf6', bg: '#f5f3ff',
+    hint: 'Ask the AI to write or draft something in a specific format.',
+    fields: [
+      { key: 'format',      label: 'Output format',      type: 'text', rows: 1,
+        placeholder: 'professional email / LinkedIn post / Slack message / bullet list / report section' },
+      { key: 'tone',        label: 'Tone',               type: 'text', rows: 1,
+        placeholder: 'friendly / formal / concise / persuasive' },
+      { key: 'instruction', label: 'What to write',      type: 'textarea', rows: 3,
+        placeholder: 'Write a brief update about {{previous}} for my team. Keep it under 150 words.' },
+    ]
+  },
+  {
+    id: 'transform', label: 'Transform', icon: 'transform', color: '#f59e0b', bg: '#fffbeb',
+    hint: 'Reformat, translate, clean, or restructure data from a previous step.',
+    fields: [
+      { key: 'instruction', label: 'How to transform',   type: 'textarea', rows: 3,
+        placeholder: 'Convert {{previous}} to a JSON array with fields: name, date, amount\nor\nTranslate {{previous}} to French\nor\nExtract only the prices from {{previous}}' },
+    ]
+  },
+  {
+    id: 'filter', label: 'Filter / Condition', icon: 'rule', color: '#e11d48', bg: '#fff1f2',
+    hint: 'Only pass through results that meet a condition — skip the rest.',
+    fields: [
+      { key: 'condition',   label: 'Only continue if…',  type: 'textarea', rows: 2,
+        placeholder: 'The result mentions a price increase\nor\nThere are more than 3 items\nor\nThe sentiment is negative' },
+      { key: 'fallback',    label: 'If condition fails, say…', type: 'text', rows: 1,
+        placeholder: 'No relevant results found — workflow stopped.' },
+    ]
+  },
+  {
+    id: 'code', label: 'Generate Code', icon: 'terminal', color: '#374151', bg: '#f9fafb',
+    hint: 'Ask the AI to write code that solves a task.',
+    fields: [
+      { key: 'language',    label: 'Language',           type: 'text', rows: 1,
+        placeholder: 'Python / JavaScript / SQL / bash' },
+      { key: 'instruction', label: 'What to build',      type: 'textarea', rows: 3,
+        placeholder: 'Write a Python script that reads {{previous}} and outputs a CSV\nor\nWrite a SQL query to find duplicate email addresses' },
+    ]
+  },
+  {
+    id: 'send', label: 'Send / Output', icon: 'send', color: '#0ea5e9', bg: '#f0f9ff',
+    hint: 'Send the result somewhere — email, Slack, webhook, document, or just copy it.',
+    fields: [
+      { key: 'destination', label: 'Where to send',      type: 'text', rows: 1,
+        placeholder: 'email to hello@example.com / Slack #team-updates / webhook https://… / copy to clipboard / save to notes' },
+      { key: 'format',      label: 'Message format',     type: 'textarea', rows: 2,
+        placeholder: 'Subject: Weekly update\n\n{{previous}}\n\nSent by Biome Taiga' },
+    ]
+  },
+  {
+    id: 'custom', label: 'Custom', icon: 'build', color: '#7c3aed', bg: '#f5f3ff',
+    hint: 'Fully custom step — describe anything you want the AI to do.',
+    fields: [
+      { key: 'name',        label: 'Step name',          type: 'text', rows: 1,
+        placeholder: 'My custom action' },
+      { key: 'instruction', label: 'Full instruction',   type: 'textarea', rows: 4,
+        placeholder: 'Describe in detail what you want to happen in this step. Be as specific as possible.\nYou can reference {{previous}} to use the output of the prior step.' },
+    ]
+  },
 ];
 
 function saveRecipes() { localStorage.setItem('nordic-recipes', JSON.stringify(state.recipes)); }
@@ -875,98 +949,159 @@ function saveRecipes() { localStorage.setItem('nordic-recipes', JSON.stringify(s
 function renderRecipesMode() {
   const recipe = state.recipes.find(r => r.id === state.activeRecipeId);
   const nodes = recipe ? recipe.nodes : [];
+  const rid = recipe ? recipe.id : '';
+
+  const stepCard = (node, i) => {
+    const t = STEP_TYPES.find(s => s.id === node.type) || STEP_TYPES[STEP_TYPES.length - 1];
+    const fields = node.fields || {};
+    return `
+      <div class="flex items-start gap-0" draggable="true"
+        ondragstart="window._recipeDragStart(event,${i})"
+        ondragover="event.preventDefault();this.style.outline='2px dashed ${t.color}'"
+        ondragleave="this.style.outline=''"
+        ondrop="event.preventDefault();this.style.outline='';window._recipeDrop(event,${i})">
+        <div class="flex flex-col items-center gap-2 relative group">
+          <!-- Step label + drag handle -->
+          <div class="flex items-center gap-1 self-start ml-1">
+            <span class="material-symbols-outlined opacity-30 group-hover:opacity-70 transition-opacity select-none" style="font-size:13px;color:${t.color};cursor:grab" title="Drag to reorder">drag_indicator</span>
+            <span class="text-[9px] font-bold tracking-widest uppercase" style="color:${t.color};font-family:Manrope">Step ${i + 1}</span>
+          </div>
+
+          <!-- Card -->
+          <div class="bg-white rounded-2xl shadow-sm overflow-hidden border" style="min-width:220px;max-width:260px;border-color:${t.color}20">
+            <!-- Header: type selector + delete -->
+            <div class="flex items-center gap-2 px-3 py-2.5 border-b" style="background:${t.bg};border-color:${t.color}15">
+              <span class="material-symbols-outlined flex-shrink-0" style="font-size:16px;color:${t.color}">${t.icon}</span>
+              <select onchange="window._changeStepType('${rid}',${i},this.value)"
+                class="flex-1 text-[11px] font-bold border-none outline-none bg-transparent cursor-pointer font-headline"
+                style="color:${t.color};font-family:Manrope">
+                ${STEP_TYPES.map(st => `<option value="${st.id}" ${st.id === node.type ? 'selected' : ''}>${st.label}</option>`).join('')}
+              </select>
+              <button onclick="window._removeRecipeNode('${rid}',${i})"
+                class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 text-red-300"
+                title="Remove step">
+                <span class="material-symbols-outlined" style="font-size:15px">close</span>
+              </button>
+            </div>
+
+            <!-- Step type hint -->
+            <div class="px-3 pt-2 pb-1">
+              <p class="text-[9px] text-outline-variant leading-relaxed">${t.hint}</p>
+            </div>
+
+            <!-- Fields -->
+            ${t.fields.map(f => `
+              <div class="px-3 pb-2.5">
+                <label class="text-[9px] font-bold uppercase tracking-wide block mb-1" style="color:${t.color};font-family:Manrope;opacity:.7">${f.label}</label>
+                ${f.type === 'textarea'
+                  ? `<textarea
+                      rows="${f.rows || 2}"
+                      placeholder="${f.placeholder}"
+                      class="w-full text-[11px] text-on-surface bg-surface-container-low/60 border rounded-lg px-2 py-1.5 resize-none outline-none transition-colors font-body leading-relaxed"
+                      style="border-color:${t.color}20;min-width:0"
+                      onfocus="this.style.borderColor='${t.color}60'"
+                      onblur="this.style.borderColor='${t.color}20'"
+                      oninput="window._updateStepField('${rid}',${i},'${f.key}',this.value)"
+                    >${escapeHtml(fields[f.key] || '')}</textarea>`
+                  : `<input
+                      type="text"
+                      placeholder="${f.placeholder}"
+                      value="${escapeHtml(fields[f.key] || '')}"
+                      class="w-full text-[11px] text-on-surface bg-surface-container-low/60 border rounded-lg px-2 py-1.5 outline-none transition-colors font-body"
+                      style="border-color:${t.color}20"
+                      onfocus="this.style.borderColor='${t.color}60'"
+                      onblur="this.style.borderColor='${t.color}20'"
+                      oninput="window._updateStepField('${rid}',${i},'${f.key}',this.value)"
+                    />`
+                }
+              </div>`).join('')}
+
+            <!-- {{previous}} hint -->
+            <div class="px-3 pb-2.5">
+              <span class="text-[9px] text-outline-variant/60 font-body">Use <code class="bg-surface-container px-1 py-0.5 rounded text-[9px]" style="color:${t.color}">{{previous}}</code> to reference the prior step's output</span>
+            </div>
+          </div>
+        </div>
+        ${i < nodes.length - 1
+          ? `<div class="flex items-center self-center mt-6 px-1.5 text-outline-variant flex-shrink-0">
+               <span class="material-symbols-outlined" style="font-size:22px">arrow_forward</span>
+             </div>`
+          : ''}
+      </div>`;
+  };
 
   return `<div class="flex-1 flex flex-col overflow-hidden">
-    <!-- Recipes header -->
+
+    <!-- Header bar -->
     <div class="flex items-center gap-3 px-4 py-2.5 border-b border-outline-variant/10 bg-surface-container-low flex-shrink-0">
-      <select onchange="window._selectRecipe(this.value)" class="text-xs font-semibold bg-surface-container border border-outline-variant/20 rounded-lg px-2 py-1.5 text-on-surface outline-none cursor-pointer font-headline" style="font-family:Manrope">
+      <select onchange="window._selectRecipe(this.value)"
+        class="text-xs font-semibold bg-surface-container border border-outline-variant/20 rounded-lg px-2 py-1.5 text-on-surface outline-none cursor-pointer font-headline"
+        style="font-family:Manrope">
         <option value="">— New Workflow —</option>
-        ${state.recipes.map(r => `<option value="${r.id}" ${r.id===state.activeRecipeId?'selected':''}>${escapeHtml(r.name)}</option>`).join('')}
+        ${state.recipes.map(r => `<option value="${r.id}" ${r.id === state.activeRecipeId ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}
       </select>
-      ${recipe ? `<span class="text-[11px] text-on-surface-variant">${nodes.length} step${nodes.length!==1?'s':''}</span>` : ''}
+      ${recipe ? `<span class="text-[11px] text-on-surface-variant">${nodes.length} step${nodes.length !== 1 ? 's' : ''}</span>` : ''}
       <div class="flex gap-2 ml-auto">
-        ${recipe ? `<button onclick="window._runRecipe()" class="flex items-center gap-1.5 px-3 py-1.5 bg-primary-container text-on-primary-container border border-primary/20 rounded-lg text-[11px] font-bold font-headline hover:bg-primary/15 transition-colors" style="font-family:Manrope"><span class="material-symbols-outlined" style="font-size:13px">play_circle</span> Run</button>` : ''}
-        <button onclick="window._saveRecipe()" class="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-lowest border border-outline-variant/20 rounded-lg text-[11px] font-bold font-headline hover:bg-surface-container transition-colors text-on-surface-variant" style="font-family:Manrope"><span class="material-symbols-outlined" style="font-size:13px">save</span> Save</button>
+        ${recipe && nodes.length ? `
+          <button onclick="window._runRecipe()"
+            class="flex items-center gap-1.5 px-3 py-1.5 bg-primary-container text-on-primary-container border border-primary/20 rounded-lg text-[11px] font-bold font-headline hover:bg-primary/15 transition-colors"
+            style="font-family:Manrope">
+            <span class="material-symbols-outlined" style="font-size:13px">play_circle</span> Run workflow
+          </button>` : ''}
+        <button onclick="window._saveRecipe()"
+          class="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-lowest border border-outline-variant/20 rounded-lg text-[11px] font-bold font-headline hover:bg-surface-container transition-colors text-on-surface-variant"
+          style="font-family:Manrope">
+          <span class="material-symbols-outlined" style="font-size:13px">save</span> Save
+        </button>
+        ${recipe ? `
+          <button onclick="window._deleteRecipe('${rid}')"
+            class="flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold font-headline hover:bg-red-50 transition-colors text-outline-variant hover:text-red-400"
+            style="font-family:Manrope" title="Delete this workflow">
+            <span class="material-symbols-outlined" style="font-size:13px">delete</span>
+          </button>` : ''}
       </div>
     </div>
 
-    <!-- Workflow canvas -->
-    <div class="flex-1 overflow-auto relative" style="background-color:#eff5f2;background-image:radial-gradient(#d8e5e2 1px, transparent 1px);background-size:28px 28px">
-      <div class="flex items-start gap-0 p-10 min-w-max min-h-full">
-        ${nodes.map((node, i) => {
-          const t = STEP_TYPES.find(s => s.id === node.type) || STEP_TYPES[6];
-          const STEP_CONFIGS = {
-            search:     { placeholder: 'What to search for…', label: 'Query' },
-            summarise:  { placeholder: 'What to summarise…', label: 'Topic' },
-            draft:      { placeholder: 'What to draft…', label: 'Prompt' },
-            send_slack: { placeholder: '#channel or @user', label: 'Destination' },
-            send_email: { placeholder: 'recipient@example.com', label: 'To' },
-            code:       { placeholder: 'Describe what to run…', label: 'Task' },
-            custom:     { placeholder: 'Describe the action…', label: 'Action' },
-          };
-          const cfg = STEP_CONFIGS[node.type] || STEP_CONFIGS.custom;
-          return `
-            <div class="flex items-center gap-0" draggable="true"
-              ondragstart="window._recipeDragStart(event,${i})"
-              ondragover="event.preventDefault();event.currentTarget.style.opacity='.6'"
-              ondragleave="event.currentTarget.style.opacity='1'"
-              ondrop="event.preventDefault();event.currentTarget.style.opacity='1';window._recipeDrop(event,${i})">
-              <div class="flex flex-col items-center gap-1.5 relative group" style="cursor:grab">
-                <div class="text-[9px] font-bold tracking-widest uppercase font-headline flex items-center gap-1" style="color:${t.color};font-family:Manrope">
-                  <span class="material-symbols-outlined opacity-40 group-hover:opacity-80 transition-opacity" style="font-size:11px;cursor:grab" title="Drag to reorder">drag_indicator</span>
-                  Step ${i+1}
-                </div>
-                <div class="bg-white border-2 rounded-xl shadow-sm min-w-[150px] overflow-hidden" style="border-color:${t.color}30">
-                  <!-- Step header -->
-                  <div class="flex items-center gap-1.5 px-3 py-2" style="background:${t.bg}">
-                    <span class="material-symbols-outlined" style="font-size:15px;color:${t.color}">${t.icon}</span>
-                    <span class="text-[11px] font-bold font-headline flex-1" style="color:${t.color};font-family:Manrope">${t.label}</span>
-                    <!-- Type selector -->
-                    <select onchange="window._changeStepType('${recipe ? recipe.id : ''}',${i},this.value)" class="text-[9px] border-none outline-none bg-transparent cursor-pointer font-semibold" style="color:${t.color};max-width:60px" title="Change step type">
-                      ${STEP_TYPES.map(st => `<option value="${st.id}" ${st.id===node.type?'selected':''}>${st.label}</option>`).join('')}
-                    </select>
-                    <button onclick="window._removeRecipeNode('${recipe ? recipe.id : ''}',${i})" class="opacity-0 group-hover:opacity-100 transition-opacity text-red-300 hover:text-red-500 ml-0.5" title="Remove step">
-                      <span class="material-symbols-outlined" style="font-size:13px">close</span>
-                    </button>
-                  </div>
-                  <!-- Inline config input -->
-                  <div class="px-3 py-2">
-                    <div class="text-[9px] font-bold text-outline-variant uppercase tracking-wide mb-1" style="font-family:Manrope">${cfg.label}</div>
-                    <textarea
-                      placeholder="${cfg.placeholder}"
-                      rows="2"
-                      class="w-full text-[11px] text-on-surface bg-surface-container-low border border-outline-variant/15 rounded-lg px-2 py-1.5 resize-none outline-none focus:border-primary/30 transition-colors font-body leading-relaxed"
-                      style="min-width:130px"
-                      onchange="window._updateStepConfig('${recipe ? recipe.id : ''}',${i},this.value)"
-                      oninput="window._updateStepConfig('${recipe ? recipe.id : ''}',${i},this.value)"
-                    >${escapeHtml(node.config || '')}</textarea>
-                  </div>
-                </div>
-              </div>
-              ${i < nodes.length - 1 ? `<div class="flex items-center px-2 pt-5 text-outline-variant flex-shrink-0"><span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></div>` : ''}
-            </div>`;
-        }).join('')}
-        <!-- Connector arrow before add button (only if nodes exist) -->
-        ${nodes.length > 0 ? `<div class="flex items-center px-2 pt-5 text-outline-variant flex-shrink-0"><span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></div>` : ''}
-        <!-- Add step button -->
-        <div onclick="window._addRecipeStep()" class="border-2 border-dashed border-outline-variant/40 rounded-xl px-5 py-4 cursor-pointer hover:border-primary/40 hover:bg-surface-container/60 transition-all text-center min-w-[110px] mt-6 self-center">
-          <span class="material-symbols-outlined text-outline-variant" style="font-size:22px">add</span>
-          <div class="text-[10px] font-bold text-outline-variant font-headline mt-0.5" style="font-family:Manrope">Add step</div>
-        </div>
-      </div>
-      ${!nodes.length ? `<div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span class="material-symbols-outlined text-outline-variant/25" style="font-size:52px">account_tree</span>
-        <p class="text-sm text-outline-variant/40 mt-3 font-medium text-center max-w-xs">Build a workflow by adding steps below.<br/>Each step passes its output to the next.</p>
-      </div>` : ''}
+    <!-- Canvas — horizontal scroll, vertical center -->
+    <div class="flex-1 overflow-auto relative" style="background:#eff5f2;background-image:radial-gradient(#d8e5e2 1px,transparent 1px);background-size:28px 28px">
+      ${nodes.length ? `
+        <div class="flex items-start gap-0 p-10 min-w-max">
+          ${nodes.map((node, i) => stepCard(node, i)).join('')}
+          <!-- Add step at end -->
+          <div class="flex items-center self-center mt-6 px-1.5 text-outline-variant flex-shrink-0">
+            <span class="material-symbols-outlined" style="font-size:22px">arrow_forward</span>
+          </div>
+          <div onclick="window._addRecipeStep()"
+            class="self-center mt-6 border-2 border-dashed border-outline-variant/30 rounded-2xl px-5 py-5 cursor-pointer hover:border-primary/40 hover:bg-white/60 transition-all text-center"
+            style="min-width:110px">
+            <span class="material-symbols-outlined text-outline-variant/60" style="font-size:24px">add</span>
+            <div class="text-[10px] font-bold text-outline-variant/60 font-headline mt-0.5" style="font-family:Manrope">Add step</div>
+          </div>
+        </div>` :
+        `<div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span class="material-symbols-outlined text-outline-variant/20" style="font-size:56px">account_tree</span>
+          <p class="text-sm text-outline-variant/40 mt-3 text-center max-w-xs font-body leading-relaxed">
+            Add your first step from the palette below.<br/>
+            Each step passes its output to the next.
+          </p>
+          <p class="text-[10px] text-outline-variant/30 mt-2 font-body">
+            Use <code class="bg-surface-container px-1 py-0.5 rounded">{{previous}}</code> in any field to chain steps together.
+          </p>
+        </div>`
+      }
     </div>
 
-    <!-- Step type palette -->
-    <div class="flex-shrink-0 px-4 py-2.5 border-t border-outline-variant/10 bg-surface-container-low">
-      <div class="flex items-center gap-1.5 overflow-x-auto">
-        <span class="text-[10px] font-bold text-outline-variant font-headline shrink-0 mr-1" style="font-family:Manrope">Add:</span>
-        ${STEP_TYPES.map(t => `<button onclick="window._quickAddStep('${t.id}')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[10px] font-semibold font-headline whitespace-nowrap hover:opacity-80 active:scale-95 transition-all shrink-0" style="background:${t.bg};border-color:${t.color}30;color:${t.color};font-family:Manrope">
-          <span class="material-symbols-outlined" style="font-size:12px">${t.icon}</span>${t.label}
-        </button>`).join('')}
+    <!-- Step palette -->
+    <div class="flex-shrink-0 border-t border-outline-variant/10 bg-surface-container-low">
+      <div class="flex items-center gap-1.5 px-4 py-2.5 overflow-x-auto">
+        <span class="text-[9px] font-bold uppercase tracking-widest text-outline-variant/60 shrink-0 mr-0.5" style="font-family:Manrope">Add step:</span>
+        ${STEP_TYPES.map(t => `
+          <button onclick="window._quickAddStep('${t.id}')"
+            class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[10px] font-semibold font-headline whitespace-nowrap hover:opacity-85 active:scale-95 transition-all shrink-0"
+            style="background:${t.bg};border-color:${t.color}25;color:${t.color};font-family:Manrope"
+            title="${t.hint}">
+            <span class="material-symbols-outlined" style="font-size:12px">${t.icon}</span>${t.label}
+          </button>`).join('')}
       </div>
     </div>
   </div>`;
@@ -2943,43 +3078,80 @@ window._runRecipe = () => {
   state.view = 'chat';
   location.hash = '#chat';
   render();
-  const prompt = `Run this workflow:\n${recipe.nodes.map((n,i) => `Step ${i+1}: ${n.type}${n.config ? ' — ' + n.config : ''}`).join('\n')}\n\nExecute each step in order.`;
-  setTimeout(() => { appendMessage('user', `Run workflow: ${recipe.name}`); gw.chatSend(prompt, state.sessionKey).catch(e => appendMessage('assistant', 'Error: ' + e.message)); state.streaming = true; updateSendBtn(); updateStreamingMessage(); }, 100);
+
+  // Build a rich prompt describing each step with all its configured fields
+  const stepLines = recipe.nodes.map((n, i) => {
+    const t = STEP_TYPES.find(s => s.id === n.type) || STEP_TYPES[STEP_TYPES.length - 1];
+    const fields = n.fields || {};
+    const fieldLines = t.fields
+      .filter(f => fields[f.key]?.trim())
+      .map(f => `  ${f.label}: ${fields[f.key].trim()}`)
+      .join('\n');
+    return `Step ${i + 1} — ${t.label}${fieldLines ? '\n' + fieldLines : ' (no configuration set)'}`;
+  }).join('\n\n');
+
+  const prompt = `Please execute this workflow step by step. For each step, show your work and what you produced before moving to the next.\n\nWorkflow: "${recipe.name}"\n\n${stepLines}\n\nImportant: When a step references {{previous}}, use the actual output of the previous step. Execute all steps in order and summarise the final result at the end.`;
+
+  setTimeout(() => {
+    appendMessage('user', `▶ Run workflow: ${recipe.name}`);
+    gw.chatSend(prompt, state.sessionKey).catch(e => appendMessage('assistant', 'Error: ' + e.message));
+    state.streaming = true;
+    updateSendBtn();
+    updateStreamingMessage();
+  }, 100);
 };
+
 window._addRecipeStep = () => {
-  if (!state.activeRecipeId) { showToast('Save the recipe first'); window._saveRecipe(); return; }
-  const type = STEP_TYPES[0].id;
+  if (!state.activeRecipeId) { window._saveRecipe(); return; }
   const recipe = state.recipes.find(r => r.id === state.activeRecipeId);
-  if (recipe) { recipe.nodes.push({ type, config: '' }); saveRecipes(); render(); }
+  if (recipe) { recipe.nodes.push({ type: 'prompt', fields: {} }); saveRecipes(); render(); }
 };
+
 window._quickAddStep = (type) => {
-  if (!state.activeRecipeId) { state.recipes.unshift({ id: 'rec-' + Date.now(), name: 'My Workflow', nodes: [], createdAt: Date.now() }); state.activeRecipeId = state.recipes[0].id; saveRecipes(); }
+  if (!state.activeRecipeId) {
+    const id = 'rec-' + Date.now();
+    state.recipes.unshift({ id, name: 'My Workflow', nodes: [], createdAt: Date.now() });
+    state.activeRecipeId = id;
+    saveRecipes();
+  }
   const recipe = state.recipes.find(r => r.id === state.activeRecipeId);
-  if (recipe) { recipe.nodes.push({ type, config: '' }); saveRecipes(); render(); }
+  if (recipe) { recipe.nodes.push({ type, fields: {} }); saveRecipes(); render(); }
 };
-window._editRecipeNode = (recipeId, idx) => {
-  const recipe = state.recipes.find(r => r.id === recipeId);
-  if (!recipe) return;
-  const node = recipe.nodes[idx];
-  if (!node) return;
-  const config = prompt(`Configure "${node.type}" step:`, node.config || '');
-  if (config !== null) { node.config = config; saveRecipes(); render(); }
-};
+
 window._removeRecipeNode = (recipeId, idx) => {
   const recipe = state.recipes.find(r => r.id === recipeId);
   if (recipe) { recipe.nodes.splice(idx, 1); saveRecipes(); render(); }
 };
+
 window._changeStepType = (recipeId, idx, newType) => {
   const recipe = state.recipes.find(r => r.id === recipeId);
-  if (recipe && recipe.nodes[idx]) { recipe.nodes[idx].type = newType; recipe.nodes[idx].config = ''; saveRecipes(); render(); }
+  if (recipe && recipe.nodes[idx]) {
+    recipe.nodes[idx].type = newType;
+    recipe.nodes[idx].fields = {}; // clear old fields when type changes
+    saveRecipes();
+    render();
+  }
 };
-window._updateStepConfig = (recipeId, idx, val) => {
+
+// Per-field update — no full re-render, just debounced save
+window._updateStepField = (recipeId, idx, fieldKey, val) => {
   const recipe = state.recipes.find(r => r.id === recipeId);
-  if (recipe && recipe.nodes[idx]) { recipe.nodes[idx].config = val; }
-  // Don't re-render on every keystroke — just save debounced
+  if (recipe && recipe.nodes[idx]) {
+    if (!recipe.nodes[idx].fields) recipe.nodes[idx].fields = {};
+    recipe.nodes[idx].fields[fieldKey] = val;
+  }
   clearTimeout(window.__recipeSaveTimer);
-  window.__recipeSaveTimer = setTimeout(() => saveRecipes(), 600);
+  window.__recipeSaveTimer = setTimeout(() => saveRecipes(), 800);
 };
+
+window._deleteRecipe = (id) => {
+  if (!confirm('Delete this workflow?')) return;
+  state.recipes = state.recipes.filter(r => r.id !== id);
+  state.activeRecipeId = state.recipes[0]?.id || null;
+  saveRecipes();
+  render();
+};
+
 // Drag-and-drop reorder
 window._recipeDragStart = (e, idx) => { e.dataTransfer.setData('text/plain', String(idx)); };
 window._recipeDrop = (e, targetIdx) => {
