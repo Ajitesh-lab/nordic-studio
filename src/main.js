@@ -808,7 +808,11 @@ async function callDirectAPI(messages, tools = []) {
     const sysMsg = messages.find(m => m.role === 'system');
     const chatMsgs = messages.filter(m => m.role !== 'system').map(m => ({
       role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content || m.text || '' }],
+      parts: m._multiContent
+        ? m._multiContent.map(c => c.type === 'text'
+            ? { text: c.text }
+            : { inlineData: { mimeType: c.mimeType, data: c.data.replace(/^data:[^;]+;base64,/, '') } })
+        : [{ text: m.content || m.text || '' }],
     }));
     const body = { contents: chatMsgs };
     if (sysMsg) body.systemInstruction = { parts: [{ text: sysMsg.content }] };
@@ -829,7 +833,14 @@ async function callDirectAPI(messages, tools = []) {
     const apiKey = localStorage.getItem('biome-key-anthropic');
     if (!apiKey) throw new Error('No Anthropic API key — go to Settings → API Keys.');
     const sysMsg = messages.find(m => m.role === 'system');
-    const chatMsgs = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content || m.text || '' }));
+    const chatMsgs = messages.filter(m => m.role !== 'system').map(m => ({
+      role: m.role,
+      content: m._multiContent
+        ? m._multiContent.map(c => c.type === 'text'
+            ? { type: 'text', text: c.text }
+            : { type: 'image', source: { type: 'base64', media_type: c.mimeType, data: c.data.replace(/^data:[^;]+;base64,/, '') } })
+        : (m.content || m.text || ''),
+    }));
     const body = { model, max_tokens: 4096, messages: chatMsgs };
     if (sysMsg) body.system = sysMsg.content;
     if (tools.length) body.tools = tools.map(t => ({ name: t.name, description: t.description, input_schema: t.parameters }));
@@ -857,7 +868,17 @@ async function callDirectAPI(messages, tools = []) {
       mistral: 'https://api.mistral.ai/v1/chat/completions',
       perplexity: 'https://api.perplexity.ai/chat/completions',
     };
-    const body = { model, messages: messages.map(m => ({ role: m.role, content: m.content || m.text || '' })) };
+    const body = {
+      model,
+      messages: messages.map(m => ({
+        role: m.role,
+        content: m._multiContent
+          ? m._multiContent.map(c => c.type === 'text'
+              ? { type: 'text', text: c.text }
+              : { type: 'image_url', image_url: { url: c.data } })
+          : (m.content || m.text || ''),
+      })),
+    };
     if (tools.length) { body.tools = tools.map(t => ({ type: 'function', function: t })); body.tool_choice = 'auto'; }
     const r = await fetch(endpoints[provider], {
       method: 'POST',
@@ -1007,10 +1028,33 @@ You have tools: remember (save facts), recall (search memory), calculate (precis
 
 Use tools when they genuinely help — not for simple conversation. For memory: recall first before answering questions about the user's preferences/history.${memCtx}`;
 
+  // Build final user message — embed text files inline, images as multi-modal parts
+  const textFiles = state.attachments.filter(a => !a.type.startsWith('image/') && a.data && !a.loading);
+  const imageFiles = state.attachments.filter(a => a.type.startsWith('image/') && a.data);
+
+  let enrichedText = userText;
+  if (textFiles.length) {
+    enrichedText += '\n\n[Attached files:';
+    for (const f of textFiles) enrichedText += `\n\n### ${f.name}\n${String(f.data).slice(0, 80000)}`;
+    enrichedText += '\n]';
+  }
+
+  const userMsg = { role: 'user', content: enrichedText };
+  if (imageFiles.length) {
+    userMsg._multiContent = [
+      { type: 'text', text: enrichedText },
+      ...imageFiles.map(f => ({ type: 'image', data: f.data, mimeType: f.type })),
+    ];
+  }
+
+  // Clear attachments now that they're baked into the message
+  state.attachments = [];
+  updateAttachStrip();
+
   const apiMessages = [
     { role: 'system', content: systemPrompt },
     ...state.messages.map(m => ({ role: m.role, content: m.text || m.content || '' })),
-    { role: 'user', content: userText },
+    userMsg,
   ];
 
   const toolLog = [];
@@ -1454,36 +1498,117 @@ function renderRecipesMode() {
 }
 
 // ── File attachments ───────────────────────────────────────────────────────────
-function handleFileAttach(file) {
-  const maxMB = 10;
-  if (file.size > maxMB * 1024 * 1024) { showToast('File too large (max 10 MB)'); return; }
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function updateAttachStrip() {
+  const strip = document.getElementById('attachment-strip');
+  if (strip) { strip.outerHTML = renderAttachmentStrip(); wireAttachHandler(); }
+}
+
+// Lazy-load pdf.js from CDN
+async function loadPdfJs() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  return window.pdfjsLib;
+}
+
+async function handleFileAttach(file) {
+  const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+  const isImage = file.type.startsWith('image/');
+  const maxMB = isImage ? 20 : 15;
+  if (file.size > maxMB * 1024 * 1024) { showToast(`File too large (max ${maxMB} MB)`); return; }
+
+  // PDF — extract text with pdf.js
+  if (isPDF) {
+    const id = 'att-' + Date.now();
+    state.attachments.push({ id, name: file.name, type: 'application/pdf', size: file.size, data: null, loading: true });
+    updateAttachStrip();
+    try {
+      const lib = await loadPdfJs();
+      const buf = await file.arrayBuffer();
+      const pdf = await lib.getDocument({ data: buf }).promise;
+      let text = '';
+      const maxPg = Math.min(pdf.numPages, 30);
+      for (let p = 1; p <= maxPg; p++) {
+        const page = await pdf.getPage(p);
+        const c = await page.getTextContent();
+        text += c.items.map(i => i.str).join(' ') + '\n\n';
+      }
+      const att = state.attachments.find(a => a.id === id);
+      if (att) {
+        att.data = text.trim() || '[PDF had no extractable text]';
+        att.loading = false;
+        att.pages = pdf.numPages;
+      }
+    } catch {
+      const att = state.attachments.find(a => a.id === id);
+      if (att) { att.data = `[PDF: ${file.name}]`; att.loading = false; }
+    }
+    updateAttachStrip();
+    showToast(`${file.name} added`);
+    return;
+  }
+
+  // Image or text file
   const reader = new FileReader();
   reader.onload = e => {
-    const data = e.target.result;
-    state.attachments.push({ id: 'att-' + Date.now(), name: file.name, type: file.type, size: file.size, data });
-    // Re-render just the attachment area
-    const strip = document.getElementById('attachment-strip');
-    if (strip) { strip.outerHTML = renderAttachmentStrip(); wireAttachHandler(); }
-    else render();
+    state.attachments.push({ id: 'att-' + Date.now(), name: file.name, type: file.type, size: file.size, data: e.target.result });
+    updateAttachStrip();
+    showToast(`${file.name} added`);
   };
-  if (file.type.startsWith('image/')) reader.readAsDataURL(file);
-  else reader.readAsText(file);
+  if (isImage) reader.readAsDataURL(file);
+  else reader.readAsText(file, 'UTF-8');
 }
 
 function renderAttachmentStrip() {
   if (!state.attachments.length) return `<div id="attachment-strip"></div>`;
-  return `<div id="attachment-strip" class="flex gap-2 flex-wrap px-3 pt-2 pb-1 border-b border-outline-variant/10">
-    ${state.attachments.map(a => `<div class="flex items-center gap-1.5 px-2 py-1 bg-surface-container rounded-lg border border-outline-variant/15 text-[11px]">
-      <span class="material-symbols-outlined text-primary" style="font-size:13px">${a.type.startsWith('image/') ? 'image' : 'description'}</span>
-      <span class="font-medium text-on-surface max-w-[120px] truncate">${escapeHtml(a.name)}</span>
-      <button onclick="window._removeAttachment('${a.id}')" class="text-outline-variant hover:text-on-surface ml-1 leading-none">✕</button>
-    </div>`).join('')}
+  return `<div id="attachment-strip" class="flex gap-2 flex-wrap px-3 pt-2.5 pb-2 border-b border-outline-variant/10">
+    ${state.attachments.map(a => {
+      const isImg = a.type.startsWith('image/');
+      const isPDF = a.type === 'application/pdf' || a.name.endsWith('.pdf');
+      return `<div class="flex items-center gap-1.5 pl-1 pr-2 py-1 bg-surface-container rounded-xl border border-outline-variant/15 text-[11px] ${a.loading ? 'opacity-60' : ''}">
+        ${isImg && a.data
+          ? `<img src="${a.data}" class="w-7 h-7 rounded-lg object-cover flex-shrink-0" />`
+          : `<span class="material-symbols-outlined flex-shrink-0 ml-0.5" style="font-size:16px;color:${isPDF ? '#e07c39' : '#4a6453'}">${isPDF ? 'picture_as_pdf' : 'description'}</span>`
+        }
+        <div class="min-w-0">
+          <div class="font-medium text-on-surface truncate max-w-[110px]">${escapeHtml(a.name)}</div>
+          <div class="text-outline-variant/60">${a.loading ? 'Reading…' : (a.pages ? `${a.pages}pp · ` : '') + formatFileSize(a.size)}</div>
+        </div>
+        <button onclick="window._removeAttachment('${a.id}')" class="flex-shrink-0 ml-0.5 w-4 h-4 flex items-center justify-center text-outline-variant hover:text-red-400 transition-colors">✕</button>
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
 function wireAttachHandler() {
   const fileInput = document.getElementById('file-input');
   if (fileInput) fileInput.onchange = e => { for (const f of e.target.files) handleFileAttach(f); fileInput.value = ''; };
+}
+
+// Build attachment text context for text/PDF files (injected into prompts)
+function buildAttachmentContext() {
+  const textFiles = state.attachments.filter(a => !a.type.startsWith('image/') && a.data && !a.loading);
+  if (!textFiles.length) return '';
+  let ctx = '\n\n[Attached files:';
+  for (const f of textFiles) {
+    const content = String(f.data).slice(0, 80000);
+    ctx += `\n\n### ${f.name}\n${content}`;
+  }
+  ctx += '\n]';
+  return ctx;
 }
 
 // ── Skills / categorized mindmap ──────────────────────────────────────────────
@@ -1956,7 +2081,8 @@ function buildMessageWithContext(userText) {
   const primer = state.messages.length === 0 ? SESSION_PRIMER : '';
 
   const memCtx = injectMemoryContext();
-  if (!sources.length && !tools.length) return primer + memCtx + userText + mandate;
+  const attachCtx = buildAttachmentContext();
+  if (!sources.length && !tools.length) return primer + memCtx + attachCtx + userText + mandate;
 
   let context = '';
 
@@ -1978,7 +2104,7 @@ function buildMessageWithContext(userText) {
     context += `I have the following tools configured. When relevant, use them to complete tasks:\n\n${toolList}\n\n`;
   }
 
-  return `${primer}${memCtx}${context}My question: ${userText}${mandate}`;
+  return `${primer}${memCtx}${attachCtx}${context}My question: ${userText}${mandate}`;
 }
 
 async function sendMessage(text) {
@@ -1996,6 +2122,9 @@ async function sendMessage(text) {
     // OpenClaw gateway path (full Claude Code agent with browser tools)
     try {
       const msgToSend = buildMessageWithContext(text);
+      // Clear attachments after baking them into the message
+      state.attachments = [];
+      updateAttachStrip();
       await gw.chatSend(msgToSend, state.sessionKey);
       armResponseTimer();
     } catch (e) {
@@ -2745,15 +2874,21 @@ function renderInputBar() {
     </div>` : '';
 
   const plusDropup = state.plusMenuOpen ? `
-    <div class="absolute bottom-full left-0 mb-2 bg-surface-container-lowest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-50 min-w-[180px]" id="plus-menu">
-      <label for="file-input" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container transition-colors" onclick="window._togglePlusMenu()">
+    <div class="absolute bottom-full left-0 mb-2 bg-surface-container-lowest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-50 min-w-[210px]" id="plus-menu">
+      <div onclick="window._openFilePicker('any')" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-primary" style="font-size:17px">attach_file</span>
-        <span class="text-sm text-on-surface font-medium">Attach file</span>
-      </label>
-      <label for="file-input" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container transition-colors" onclick="window._togglePlusMenu()">
+        <div>
+          <div class="text-sm text-on-surface font-medium">Attach file</div>
+          <div class="text-[10px] text-outline-variant">PDF, text, code, CSV…</div>
+        </div>
+      </div>
+      <div onclick="window._openFilePicker('image')" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-primary" style="font-size:17px">image</span>
-        <span class="text-sm text-on-surface font-medium">Add photo</span>
-      </label>
+        <div>
+          <div class="text-sm text-on-surface font-medium">Add photo</div>
+          <div class="text-[10px] text-outline-variant">JPG, PNG, GIF, WebP…</div>
+        </div>
+      </div>
     </div>` : '';
 
   return `
@@ -2781,8 +2916,14 @@ function renderInputBar() {
           ${modelDropup}
         </div>
 
+        <!-- Mode pill — shows Direct or OpenClaw -->
+        <div class="flex-shrink-0 hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider" style="${state.connected ? 'background:#cdead3;color:#3e5746' : 'background:#e8f0ed;color:#717d7b'}">
+          <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background:${state.connected ? '#4a6453' : '#a8b5b2'}"></span>
+          ${state.connected ? 'OpenClaw' : 'Direct'}
+        </div>
+
         <!-- Send -->
-        <button id="send-btn" class="w-8 h-8 flex items-center justify-center bg-primary text-on-primary rounded-full shadow-sm hover:opacity-90 transition-all active:scale-95 shrink-0">
+        <button id="send-btn" class="w-8 h-8 flex items-center justify-center bg-primary text-on-primary rounded-full shadow-sm hover:opacity-90 transition-all active:scale-95 shrink-0 disabled:opacity-40">
           <span class="material-symbols-outlined" style="font-size:16px;font-variation-settings:'FILL' 1">send</span>
         </button>
       </div>
@@ -3092,8 +3233,10 @@ function render() {
   if (chatInput && sendBtn) {
     const doSend = () => {
       const t = chatInput.value.trim();
-      if (t) {
-        window._sendPrompt(t);
+      // Block if attachments still loading
+      if (state.attachments.some(a => a.loading)) { showToast('Still reading files…'); return; }
+      if (t || state.attachments.length) {
+        window._sendPrompt(t || '(see attached files)');
         chatInput.value = '';
         chatInput.style.height = 'auto';
       }
@@ -3118,11 +3261,43 @@ function render() {
     }
   }, { once: true });
 
-  // Drag-and-drop onto the input area
-  const inputArea = document.getElementById('input-area') || document.getElementById('messages-scroll');
-  if (inputArea) {
-    inputArea.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
-    inputArea.addEventListener('drop', e => { e.preventDefault(); for (const f of e.dataTransfer.files) handleFileAttach(f); });
+  // ── Drag-and-drop: whole chat area with visual highlight ──────────────────
+  const dropZone = document.getElementById('input-area') || document.getElementById('messages-scroll');
+  const inputWrap = () => document.getElementById('input-box-wrap');
+  let _dragCount = 0;
+  if (dropZone) {
+    dropZone.addEventListener('dragenter', e => {
+      e.preventDefault(); _dragCount++;
+      inputWrap()?.style && (inputWrap().style.boxShadow = '0 0 0 2px #4a6453, 0 0 0 4px rgba(74,100,83,0.15)');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      _dragCount--; if (_dragCount <= 0) { _dragCount = 0; inputWrap()?.style && (inputWrap().style.boxShadow = ''); }
+    });
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault(); _dragCount = 0;
+      inputWrap()?.style && (inputWrap().style.boxShadow = '');
+      const files = [...(e.dataTransfer.files || [])];
+      if (files.length) { files.forEach(f => handleFileAttach(f)); }
+      else {
+        // Handle dropped text
+        const text = e.dataTransfer.getData('text/plain');
+        if (text) { const inp = document.getElementById('chat-input'); if (inp) inp.value += text; }
+      }
+    });
+  }
+
+  // ── Paste images from clipboard ───────────────────────────────────────────
+  if (chatInput) {
+    chatInput.addEventListener('paste', e => {
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageItem = items.find(i => i.type.startsWith('image/'));
+      if (imageItem) {
+        e.preventDefault();
+        const file = imageItem.getAsFile();
+        if (file) handleFileAttach(new File([file], `pasted-image-${Date.now()}.png`, { type: file.type }));
+      }
+    });
   }
 
   // Focus palette input if open
@@ -3563,6 +3738,20 @@ window._resetMindmap = () => {
 // Model picker
 window._toggleModelPicker = () => { state.modelPickerOpen = !state.modelPickerOpen; state.plusMenuOpen = false; render(); };
 window._togglePlusMenu = () => { state.plusMenuOpen = !state.plusMenuOpen; state.modelPickerOpen = false; render(); };
+window._openFilePicker = (kind) => {
+  // Close the menu WITHOUT a full render — keep the file input in the DOM
+  state.plusMenuOpen = false;
+  document.getElementById('plus-menu')?.remove();
+  requestAnimationFrame(() => {
+    const inp = document.getElementById('file-input');
+    if (!inp) return;
+    inp.accept = kind === 'image'
+      ? 'image/*'
+      : 'image/*,.pdf,.txt,.md,.csv,.json,.js,.ts,.py,.html,.css,.yaml,.xml,.docx,.xlsx';
+    inp.multiple = true;
+    inp.click();
+  });
+};
 window._toggleHeaderMenu = () => { state.headerMenuOpen = !state.headerMenuOpen; state.plusMenuOpen = false; render(); };
 window._closeHeaderMenu = () => { state.headerMenuOpen = false; };
 window._openPalette = () => { state.paletteOpen = true; render(); };
