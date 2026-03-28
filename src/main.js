@@ -7,33 +7,55 @@ const state = window.__nordicState || {
   connected: false,
   sessions: [],
   messages: [],
-  sessionKey: _freshSessionKey(),   // fresh session on every cold start
+  sessionKey: _freshSessionKey(),
   streaming: false,
   streamText: '',
   runId: null,
   sidebarPanel: null,
-  // Mindmap
+  // ── Conversation history & workspaces ────────────────────────────────────
+  conversations: JSON.parse(localStorage.getItem('nordic-conversations') || '[]'),
+  activeConvId: localStorage.getItem('nordic-active-conv') || null,
+  workspaces: JSON.parse(localStorage.getItem('nordic-workspaces') || '[{"id":"default","name":"Personal","icon":"home"}]'),
+  activeWorkspaceId: localStorage.getItem('nordic-active-workspace') || 'default',
+  // ── Model switcher ────────────────────────────────────────────────────────
+  currentModel: localStorage.getItem('nordic-model') || 'google/gemini-2.0-flash',
+  modelPickerOpen: false,
+  // ── Canvas / Artifacts ────────────────────────────────────────────────────
+  artifacts: [],
+  activeArtifactId: null,
+  canvasOpen: false,
+  // ── Command palette ───────────────────────────────────────────────────────
+  paletteOpen: false,
+  paletteQuery: '',
+  paletteIdx: 0,
+  // ── Arena mode ────────────────────────────────────────────────────────────
+  arenaMode: false,
+  arenaModels: ['google/gemini-2.0-flash', 'google/gemini-2.5-pro'],
+  arenaResponses: {},   // modelId → { text, done }
+  // ── Mindmap mode ─────────────────────────────────────────────────────────
   mindmapNodes: [
     { id: 'center', label: 'OpenClaw', sub: 'Main Chat AI', icon: 'neurology', x: 2500, y: 2500, type: 'center' },
   ],
   skillsData: {},
   skillsLoaded: false,
-  expandedCategories: {},   // catId → true/false
+  expandedCategories: {},
   selectedSkillKey: null,
   pendingSkillRefresh: false,
-  // Mindmap pan/zoom
   mapPanX: 0, mapPanY: 0, mapScale: 1.0,
   _mapCentered: false,
-  // Presence
+  mindmapMode: 'skills',    // 'skills' | 'recipes'
+  recipes: JSON.parse(localStorage.getItem('nordic-recipes') || '[]'),
+  activeRecipeId: null,
+  // ── Presence ─────────────────────────────────────────────────────────────
   presence: [],
   presenceLog: [],
   monitorOpen: false,
-  // Thinking label
   thinkingLabel: 'thinking',
-  // Custom data sources
+  // ── Custom data & tools ───────────────────────────────────────────────────
   customSources: JSON.parse(localStorage.getItem('nordic-custom-sources') || '[]'),
-  // Custom tools (MCP servers, API endpoints)
   customTools: JSON.parse(localStorage.getItem('nordic-custom-tools') || '[]'),
+  // ── File attachments (current turn) ───────────────────────────────────────
+  attachments: [],
 };
 window.__nordicState = state;
 
@@ -550,7 +572,356 @@ function timeAgo(ts) {
   if (s < 5) return 'just now';
   if (s < 60) return `${s}s ago`;
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  return `${Math.floor(s / 3600)}h ago`;
+  const h = Math.floor(s / 3600);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'Yesterday' : `${d}d ago`;
+}
+
+// ── Conversation persistence ───────────────────────────────────────────────────
+function saveConversations() {
+  localStorage.setItem('nordic-conversations', JSON.stringify(state.conversations));
+}
+
+function createConversation() {
+  if (!state.messages.length) return;
+  const firstUser = state.messages.find(m => m.role === 'user');
+  const title = firstUser ? firstUser.text.slice(0, 50).trim() + (firstUser.text.length > 50 ? '…' : '') : 'New conversation';
+  if (state.activeConvId) {
+    // Update existing
+    const conv = state.conversations.find(c => c.id === state.activeConvId);
+    if (conv) { conv.messages = [...state.messages]; conv.updatedAt = Date.now(); saveConversations(); return; }
+  }
+  // Create new
+  const id = 'conv-' + Date.now();
+  state.activeConvId = id;
+  localStorage.setItem('nordic-active-conv', id);
+  state.conversations.unshift({ id, workspaceId: state.activeWorkspaceId, title, messages: [...state.messages], model: state.currentModel, createdAt: Date.now(), updatedAt: Date.now() });
+  if (state.conversations.length > 200) state.conversations = state.conversations.slice(0, 200);
+  saveConversations();
+}
+
+function loadConversation(id) {
+  const conv = state.conversations.find(c => c.id === id);
+  if (!conv) return;
+  state.activeConvId = id;
+  localStorage.setItem('nordic-active-conv', id);
+  state.messages = [...conv.messages];
+  state.sessionKey = _freshSessionKey();
+  state.artifacts = [];
+  state.canvasOpen = false;
+  state.attachments = [];
+  render();
+}
+
+function deleteConversation(id) {
+  state.conversations = state.conversations.filter(c => c.id !== id);
+  if (state.activeConvId === id) { state.activeConvId = null; localStorage.removeItem('nordic-active-conv'); state.messages = []; }
+  saveConversations();
+  render();
+}
+
+// ── Model constants + helpers ──────────────────────────────────────────────────
+const MODELS = [
+  { id: 'google/gemini-2.0-flash',      label: 'Gemini 2.0 Flash',  note: 'Fast, cost-efficient',       icon: 'bolt' },
+  { id: 'google/gemini-2.5-pro',        label: 'Gemini 2.5 Pro',    note: 'Best for complex reasoning', icon: 'smart_toy' },
+  { id: 'google/gemini-2.5-flash',      label: 'Gemini 2.5 Flash',  note: 'Balanced speed & quality',   icon: 'electric_bolt' },
+  { id: 'openai/gpt-4o',               label: 'GPT-4o',             note: 'OpenAI · vision ready',      icon: 'psychology_alt' },
+];
+
+function modelLabel(id) { return (MODELS.find(m => m.id === id) || MODELS[0]).label; }
+
+function renderModelPicker() {
+  if (!state.modelPickerOpen) {
+    return `<button onclick="window._toggleModelPicker()" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container border border-outline-variant/20 text-[11px] font-semibold text-on-surface-variant hover:bg-surface-container-high transition-colors font-headline" style="font-family:Manrope">
+      <span class="material-symbols-outlined" style="font-size:13px">smart_toy</span>
+      ${escapeHtml(modelLabel(state.currentModel))}
+      <span class="material-symbols-outlined" style="font-size:11px">expand_more</span>
+    </button>`;
+  }
+  return `<div class="relative">
+    <button onclick="window._toggleModelPicker()" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary-container border border-primary/20 text-[11px] font-semibold text-on-primary-container transition-colors font-headline" style="font-family:Manrope">
+      <span class="material-symbols-outlined" style="font-size:13px">smart_toy</span>
+      ${escapeHtml(modelLabel(state.currentModel))}
+      <span class="material-symbols-outlined" style="font-size:11px">expand_less</span>
+    </button>
+    <div class="absolute top-full left-0 mt-1 bg-surface-container-lowest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-50 min-w-[220px]">
+      ${MODELS.map(m => `<div onclick="window._selectModel('${m.id}')" class="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-container transition-colors ${state.currentModel === m.id ? 'bg-surface-container-low' : ''}">
+        <span class="material-symbols-outlined text-primary" style="font-size:16px">${m.icon}</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-xs font-bold text-on-surface" style="font-family:Manrope">${m.label}</div>
+          <div class="text-[10px] text-on-surface-variant">${m.note}</div>
+        </div>
+        ${state.currentModel === m.id ? '<span class="material-symbols-outlined text-primary" style="font-size:14px">check</span>' : ''}
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+// ── Artifact detection + canvas ────────────────────────────────────────────────
+function detectArtifact(text) {
+  // Extract largest fenced code block
+  const codeRx = /```(\w*)\n([\s\S]+?)```/g;
+  let best = null, match;
+  while ((match = codeRx.exec(text)) !== null) {
+    if (!best || match[2].length > best.content.length) best = { lang: match[1] || 'text', content: match[2] };
+  }
+  if (best && best.content.length > 200) return best;
+  return null;
+}
+
+function openArtifact(artifact) {
+  const id = 'art-' + Date.now();
+  state.artifacts = [{ id, ...artifact, title: artifact.lang === 'html' ? 'Page' : artifact.lang === 'python' ? 'Script' : 'Code' }];
+  state.activeArtifactId = id;
+  state.canvasOpen = true;
+}
+
+function renderCanvas() {
+  const art = state.artifacts.find(a => a.id === state.activeArtifactId);
+  if (!art) return '';
+  const isHtml = art.lang === 'html';
+  return `<div class="flex flex-col border-l border-outline-variant/20 bg-surface-container-lowest" style="width:380px;flex-shrink:0">
+    <div class="flex items-center gap-2 px-3 py-2.5 border-b border-outline-variant/10 bg-surface-container-low">
+      <span class="material-symbols-outlined text-primary" style="font-size:16px">code</span>
+      <span class="text-xs font-bold text-on-surface flex-1 font-headline" style="font-family:Manrope">${escapeHtml(art.title)}${art.lang ? ' · ' + art.lang : ''}</span>
+      <button onclick="navigator.clipboard.writeText(${JSON.stringify(art.content).replace(/'/g,"\\'")})" class="text-[10px] font-semibold text-on-surface-variant hover:text-primary px-2 py-1 rounded bg-surface-container hover:bg-surface-container-high transition-colors font-headline" style="font-family:Manrope">Copy</button>
+      <button onclick="window._closeCanvas()" class="p-1 text-outline-variant hover:text-on-surface rounded transition-colors"><span class="material-symbols-outlined" style="font-size:16px">close</span></button>
+    </div>
+    <div class="flex-1 overflow-auto p-3" style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.7;color:#293533;background:#fbfdfc;white-space:pre-wrap;word-break:break-all">${escapeHtml(art.content)}</div>
+  </div>`;
+}
+
+// ── Command palette ────────────────────────────────────────────────────────────
+function paletteItems() {
+  const q = state.paletteQuery.toLowerCase().trim();
+  const commands = [
+    { type:'cmd', icon:'add_comment',       label:'New Chat',          kbd:'⌘N',  action:'_newSession' },
+    { type:'cmd', icon:'compare',           label:'Toggle Arena Mode', kbd:'⌘A',  action:'_toggleArena' },
+    { type:'cmd', icon:'dark_mode',         label:'Toggle Dark Mode',  kbd:'',    action:'_toggleDark' },
+    { type:'cmd', icon:'neurology',         label:'Open Mindmap',      kbd:'⌘2',  action:'_goMindmap' },
+    { type:'cmd', icon:'chat',              label:'Open Chat',         kbd:'⌘1',  action:'_goChat' },
+    { type:'cmd', icon:'restart_alt',       label:'Restart Setup',     kbd:'',    action:'_resetSetup' },
+  ];
+  const convs = state.conversations.slice(0, 30).map(c => ({ type:'conv', icon:'chat_bubble', label:c.title, sub:timeAgo(c.updatedAt), id:c.id }));
+  const all = [...commands, ...convs];
+  if (!q) return all.slice(0, 12);
+  return all.filter(i => i.label.toLowerCase().includes(q)).slice(0, 10);
+}
+
+function renderPalette() {
+  if (!state.paletteOpen) return '';
+  const items = paletteItems();
+  const idx = Math.min(state.paletteIdx, items.length - 1);
+  return `<div class="absolute inset-0 z-[999] flex items-start justify-center pt-24" style="background:rgba(15,22,20,.55);backdrop-filter:blur(4px)" onclick="if(event.target===this)window._closePalette()">
+    <div class="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl shadow-2xl overflow-hidden w-[520px]">
+      <div class="flex items-center gap-3 px-4 border-b border-outline-variant/10">
+        <span class="material-symbols-outlined text-outline-variant" style="font-size:18px">search</span>
+        <input id="palette-input" class="flex-1 py-3.5 bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-outline-variant/50 font-body"
+          placeholder="Search commands, chats, workspaces…"
+          value="${escapeHtml(state.paletteQuery)}"
+          oninput="window._paletteInput(this.value)"
+          onkeydown="window._paletteKey(event)"/>
+        <span class="text-[10px] text-outline-variant border border-outline-variant/30 rounded px-1.5 py-0.5 font-semibold font-headline" style="font-family:Manrope">Esc</span>
+      </div>
+      <div class="py-1.5 max-h-80 overflow-y-auto">
+        ${items.length ? items.map((item, i) => `
+          <div onclick="window._paletteSelect(${i})" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${i === idx ? 'bg-surface-container-low' : 'hover:bg-surface-container-low'}">
+            <span class="material-symbols-outlined text-on-surface-variant" style="font-size:17px">${item.icon}</span>
+            <div class="flex-1 min-w-0">
+              <div class="text-[12px] font-semibold text-on-surface font-headline truncate" style="font-family:Manrope">${escapeHtml(item.label)}</div>
+              ${item.sub ? `<div class="text-[10px] text-on-surface-variant">${escapeHtml(item.sub)}</div>` : ''}
+            </div>
+            ${item.kbd ? `<span class="text-[10px] font-semibold text-outline-variant border border-outline-variant/20 rounded px-1.5 py-0.5 font-headline" style="font-family:Manrope">${item.kbd}</span>` : ''}
+          </div>`).join('') : `<div class="px-4 py-6 text-center text-xs text-outline-variant">No results</div>`}
+      </div>
+      <div class="px-4 py-2 border-t border-outline-variant/10 flex gap-4">
+        ${[['↵','Select'],['↑↓','Navigate'],['Esc','Close']].map(([k,l]) => `<span class="text-[10px] text-outline-variant flex items-center gap-1"><span class="border border-outline-variant/30 rounded px-1 py-0.5 font-semibold font-headline" style="font-family:Manrope">${k}</span>${l}</span>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Arena mode (multi-model) ───────────────────────────────────────────────────
+const ARENA_MODELS = [
+  { id: 'gemini-2.0-flash',        label: 'Gemini 2.0 Flash', color:'#3b82f6' },
+  { id: 'gemini-2.5-pro',          label: 'Gemini 2.5 Pro',   color:'#8b5cf6' },
+  { id: 'gemini-2.5-flash-preview-04-17', label: 'Gemini 2.5 Flash', color:'#f59e0b' },
+];
+
+async function arenaCall(modelId, prompt) {
+  const key = localStorage.getItem('biome-api-key') || '';
+  if (!key) { state.arenaResponses[modelId] = { text: '⚠ No API key found. Complete setup first.', done: true }; return; }
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
+    });
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response';
+    state.arenaResponses[modelId] = { text, done: true };
+  } catch(e) {
+    state.arenaResponses[modelId] = { text: 'Error: ' + e.message, done: true };
+  }
+  // Re-render arena
+  const arenaBody = document.getElementById('arena-body');
+  if (arenaBody) arenaBody.innerHTML = arenaBodyHTML(document.getElementById('arena-input-val')?.value || '');
+}
+
+function arenaBodyHTML(prompt) {
+  return ARENA_MODELS.map(m => {
+    const resp = state.arenaResponses[m.id];
+    return `<div class="flex flex-col border-r border-outline-variant/15 last:border-r-0" style="flex:1;min-width:0">
+      <div class="flex items-center gap-2 px-3 py-2.5 border-b border-outline-variant/10 bg-surface-container-low flex-shrink-0">
+        <span style="width:8px;height:8px;border-radius:50%;background:${m.color};flex-shrink:0"></span>
+        <span class="text-[11px] font-bold text-on-surface font-headline flex-1 truncate" style="font-family:Manrope">${m.label}</span>
+        ${resp?.done ? `<span class="text-[9px] text-outline-variant">done</span>` : `<span class="text-[9px] text-primary animate-pulse">…</span>`}
+      </div>
+      <div class="flex-1 overflow-y-auto p-3 text-xs text-on-surface leading-relaxed" style="font-size:12px">
+        ${resp ? (resp.text ? renderMarkdown(resp.text) : '') : '<div class="flex items-center gap-2 text-xs text-outline-variant"><span class="thinking-pulse"></span> Thinking…</div>'}
+      </div>
+      ${resp?.done ? `<div class="flex gap-1.5 p-2 border-t border-outline-variant/10 flex-shrink-0">
+        <button onclick="window._arenaUse('${m.id}')" class="flex-1 py-1.5 text-[10px] font-bold rounded-lg bg-primary text-on-primary font-headline transition-opacity hover:opacity-90" style="font-family:Manrope">Use this</button>
+        <button onclick="window._arenaContinue('${m.id}')" class="flex-1 py-1.5 text-[10px] font-bold rounded-lg bg-surface-container border border-outline-variant/20 text-on-surface-variant font-headline hover:bg-surface-container-high transition-colors" style="font-family:Manrope">Continue</button>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderArena() {
+  return `<div class="flex-1 flex flex-col overflow-hidden">
+    <div class="flex items-center justify-between px-4 py-2.5 border-b border-outline-variant/10 bg-surface-container-low flex-shrink-0">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-primary" style="font-size:16px">compare</span>
+        <span class="text-xs font-bold text-on-surface font-headline" style="font-family:Manrope">Arena Mode</span>
+        <span class="text-[10px] px-2 py-0.5 rounded-full bg-primary-container text-on-primary-container font-semibold font-headline" style="font-family:Manrope">${ARENA_MODELS.length} models</span>
+      </div>
+      <button onclick="window._toggleArena()" class="text-[10px] font-semibold text-on-surface-variant hover:text-on-surface px-2 py-1 rounded bg-surface-container hover:bg-surface-container-high transition-colors font-headline" style="font-family:Manrope">Exit arena</button>
+    </div>
+    <div class="flex flex-1 overflow-hidden" id="arena-body">
+      ${arenaBodyHTML('')}
+    </div>
+    <div class="flex-shrink-0 px-4 py-3 border-t border-outline-variant/10 bg-surface-container-low">
+      <div class="flex items-center gap-2 bg-surface-container-lowest border border-outline-variant/15 rounded-xl px-3 py-2 focus-within:border-primary/30 transition-colors">
+        <span class="text-[10px] font-bold text-outline-variant font-headline" style="font-family:Manrope;white-space:nowrap">Ask all →</span>
+        <input id="arena-input" class="flex-1 bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-outline-variant/50 font-body py-1" placeholder="Send to all models simultaneously…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();window._arenaSend()}"/>
+        <button onclick="window._arenaSend()" class="p-1.5 bg-primary text-on-primary rounded-lg hover:opacity-90 active:scale-95 transition-all">
+          <span class="material-symbols-outlined text-base" style="font-variation-settings:'FILL' 1">send</span>
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Recipe / Workflow builder (Mindmap mode) ───────────────────────────────────
+const STEP_TYPES = [
+  { id:'search',    label:'Web Search',    icon:'search',      color:'#3b82f6', bg:'#eff6ff' },
+  { id:'summarise', label:'Summarise',     icon:'psychology',  color:'#4a6453', bg:'#f0fdf4' },
+  { id:'draft',     label:'Draft',         icon:'edit_note',   color:'#8b5cf6', bg:'#f5f3ff' },
+  { id:'send_slack',label:'Send to Slack', icon:'chat',        color:'#e11d48', bg:'#fff1f2' },
+  { id:'send_email',label:'Send Email',    icon:'mail',        color:'#0ea5e9', bg:'#f0f9ff' },
+  { id:'code',      label:'Run Code',      icon:'terminal',    color:'#374151', bg:'#f9fafb' },
+  { id:'custom',    label:'Custom Tool',   icon:'build',       color:'#7c3aed', bg:'#f5f3ff' },
+];
+
+function saveRecipes() { localStorage.setItem('nordic-recipes', JSON.stringify(state.recipes)); }
+
+function renderRecipesMode() {
+  const recipe = state.recipes.find(r => r.id === state.activeRecipeId);
+  const nodes = recipe ? recipe.nodes : [];
+  return `<div class="flex-1 flex flex-col overflow-hidden">
+    <!-- Recipes header -->
+    <div class="flex items-center gap-3 px-4 py-2.5 border-b border-outline-variant/10 bg-surface-container-low flex-shrink-0">
+      <!-- Recipe selector -->
+      <select onchange="window._selectRecipe(this.value)" class="text-xs font-semibold bg-surface-container border border-outline-variant/20 rounded-lg px-2 py-1.5 text-on-surface outline-none cursor-pointer font-headline" style="font-family:Manrope">
+        <option value="">— New Recipe —</option>
+        ${state.recipes.map(r => `<option value="${r.id}" ${r.id===state.activeRecipeId?'selected':''}>${escapeHtml(r.name)}</option>`).join('')}
+      </select>
+      ${recipe ? `<span class="text-[11px] text-on-surface-variant">${nodes.length} step${nodes.length!==1?'s':''}</span>` : ''}
+      <div class="flex gap-2 ml-auto">
+        ${recipe ? `<button onclick="window._runRecipe()" class="flex items-center gap-1.5 px-3 py-1.5 bg-primary-container text-on-primary-container border border-primary/20 rounded-lg text-[11px] font-bold font-headline hover:bg-primary/15 transition-colors" style="font-family:Manrope"><span class="material-symbols-outlined" style="font-size:13px">play_circle</span> Run</button>` : ''}
+        <button onclick="window._saveRecipe()" class="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-lowest border border-outline-variant/20 rounded-lg text-[11px] font-bold font-headline hover:bg-surface-container transition-colors text-on-surface-variant" style="font-family:Manrope"><span class="material-symbols-outlined" style="font-size:13px">save</span> Save</button>
+      </div>
+    </div>
+
+    <!-- Workflow canvas -->
+    <div class="dot-grid flex-1 overflow-auto relative" style="background-color:#eff5f2">
+      <div class="flex items-center gap-0 p-8 min-w-max">
+        ${nodes.map((node, i) => {
+          const t = STEP_TYPES.find(s => s.id === node.type) || STEP_TYPES[6];
+          return `
+            <div class="flex items-center gap-0">
+              <div class="flex flex-col items-center gap-1">
+                <div class="text-[9px] font-bold tracking-widest uppercase font-headline" style="color:${t.color};font-family:Manrope">Step ${i+1}</div>
+                <div class="relative bg-white border-2 rounded-xl px-4 py-3 shadow-sm cursor-pointer hover:-translate-y-0.5 hover:shadow-md transition-all min-w-[120px] text-center group" style="border-color:${t.color}20;background:${t.bg}" onclick="window._editRecipeNode('${recipe.id}',${i})">
+                  <div class="flex items-center justify-center gap-1.5 mb-1">
+                    <span class="material-symbols-outlined" style="font-size:14px;color:${t.color}">${t.icon}</span>
+                    <span class="text-xs font-bold font-headline" style="color:${t.color};font-family:Manrope">${t.label}</span>
+                  </div>
+                  ${node.config ? `<div class="text-[10px] text-on-surface-variant truncate max-w-[100px]">${escapeHtml(node.config)}</div>` : ''}
+                  <button onclick="event.stopPropagation();window._removeRecipeNode('${recipe.id}',${i})" class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-400 text-white items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" style="display:flex;font-size:9px">✕</button>
+                </div>
+              </div>
+              ${i < nodes.length - 1 ? `<div class="flex items-center px-2 text-outline-variant"><span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span></div>` : ''}
+            </div>`;
+        }).join('')}
+        <!-- Add step button -->
+        ${nodes.length > 0 ? `<div class="flex items-center px-2 text-outline-variant"><span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span></div>` : ''}
+        <div onclick="window._addRecipeStep()" class="border-2 border-dashed border-outline-variant/40 rounded-xl px-5 py-3 cursor-pointer hover:border-primary/40 hover:bg-surface-container transition-all text-center min-w-[100px]" style="margin-top:${nodes.length?'20px':'0'}">
+          <span class="material-symbols-outlined text-outline-variant" style="font-size:20px">add</span>
+          <div class="text-[10px] font-bold text-outline-variant font-headline" style="font-family:Manrope">Add step</div>
+        </div>
+      </div>
+      ${!nodes.length ? `<div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span class="material-symbols-outlined text-outline-variant/30" style="font-size:48px">account_tree</span>
+        <p class="text-sm text-outline-variant/50 mt-3 font-medium">Select a recipe or create one by adding steps</p>
+      </div>` : ''}
+    </div>
+
+    <!-- Step type palette -->
+    <div class="flex-shrink-0 px-4 py-2.5 border-t border-outline-variant/10 bg-surface-container-low">
+      <div class="flex items-center gap-1.5 overflow-x-auto">
+        <span class="text-[10px] font-bold text-outline-variant font-headline shrink-0 mr-1" style="font-family:Manrope">Steps:</span>
+        ${STEP_TYPES.map(t => `<button onclick="window._quickAddStep('${t.id}')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-[10px] font-semibold font-headline whitespace-nowrap hover:opacity-80 transition-opacity shrink-0" style="background:${t.bg};border-color:${t.color}30;color:${t.color};font-family:Manrope">
+          <span class="material-symbols-outlined" style="font-size:12px">${t.icon}</span>${t.label}
+        </button>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── File attachments ───────────────────────────────────────────────────────────
+function handleFileAttach(file) {
+  const maxMB = 10;
+  if (file.size > maxMB * 1024 * 1024) { showToast('File too large (max 10 MB)'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const data = e.target.result;
+    state.attachments.push({ id: 'att-' + Date.now(), name: file.name, type: file.type, size: file.size, data });
+    // Re-render just the attachment area
+    const strip = document.getElementById('attachment-strip');
+    if (strip) { strip.outerHTML = renderAttachmentStrip(); wireAttachHandler(); }
+    else render();
+  };
+  if (file.type.startsWith('image/')) reader.readAsDataURL(file);
+  else reader.readAsText(file);
+}
+
+function renderAttachmentStrip() {
+  if (!state.attachments.length) return `<div id="attachment-strip"></div>`;
+  return `<div id="attachment-strip" class="flex gap-2 flex-wrap px-3 pt-2 pb-1 border-b border-outline-variant/10">
+    ${state.attachments.map(a => `<div class="flex items-center gap-1.5 px-2 py-1 bg-surface-container rounded-lg border border-outline-variant/15 text-[11px]">
+      <span class="material-symbols-outlined text-primary" style="font-size:13px">${a.type.startsWith('image/') ? 'image' : 'description'}</span>
+      <span class="font-medium text-on-surface max-w-[120px] truncate">${escapeHtml(a.name)}</span>
+      <button onclick="window._removeAttachment('${a.id}')" class="text-outline-variant hover:text-on-surface ml-1 leading-none">✕</button>
+    </div>`).join('')}
+  </div>`;
+}
+
+function wireAttachHandler() {
+  const fileInput = document.getElementById('file-input');
+  if (fileInput) fileInput.onchange = e => { for (const f of e.target.files) handleFileAttach(f); fileInput.value = ''; };
 }
 
 // ── Skills / categorized mindmap ──────────────────────────────────────────────
@@ -1072,7 +1443,20 @@ async function sendMessage(text) {
   }
 }
 
-function appendMessage(role, text) { state.messages.push({ role, text }); renderMessages(); }
+function appendMessage(role, text) {
+  state.messages.push({ role, text });
+  renderMessages();
+  // Auto-save conversation on every assistant message (debounced)
+  if (role === 'assistant' && text) {
+    clearTimeout(window.__convSaveTimer);
+    window.__convSaveTimer = setTimeout(() => createConversation(), 500);
+  }
+  // Detect artifact in assistant messages → offer canvas
+  if (role === 'assistant' && text && !state.canvasOpen) {
+    const art = detectArtifact(text);
+    if (art) { openArtifact(art); render(); }
+  }
+}
 
 function updateStreamingMessage() {
   ensureStyles();
@@ -1639,6 +2023,9 @@ function mindmapNodesHTML() {
 
 // ── View renderers ────────────────────────────────────────────────────────────
 function renderChat() {
+  // ── Arena mode overrides normal chat ──────────────────────────────────────
+  if (state.arenaMode) return renderArena();
+
   const isEmpty = state.messages.length === 0;
   const hr = new Date().getHours();
   const greeting = hr < 12 ? 'Good morning.' : hr < 17 ? 'Good afternoon.' : 'Good evening.';
@@ -1656,18 +2043,28 @@ function renderChat() {
           </div>
 
           <div class="w-full glass-panel rounded-2xl border border-outline-variant/10 shadow-sm">
+            ${renderAttachmentStrip()}
             <div class="flex items-end gap-3 px-4 pt-4 pb-3">
               <textarea id="chat-input-hero" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant/50 resize-none py-1 text-base font-body leading-relaxed min-h-[44px]" placeholder="Enter your thoughts here..." rows="1" autofocus></textarea>
               <button id="send-btn-hero" class="flex items-center justify-center w-10 h-10 bg-primary text-on-primary rounded-xl shadow-sm transition-transform active:scale-95 shrink-0">
                 <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1">send</span>
               </button>
             </div>
-            <div class="flex items-center px-4 py-2.5 border-t border-outline-variant/8">
-              <span class="text-[10px] uppercase tracking-widest font-semibold text-outline-variant/60">Inspire me</span>
-              <div class="flex gap-5 ml-4">
+            <div class="flex items-center justify-between px-4 py-2.5 border-t border-outline-variant/8">
+              <div class="flex items-center gap-3">
+                ${renderModelPicker()}
+                <label for="file-input-hero" class="cursor-pointer p-1.5 hover:bg-surface-container rounded-lg transition-colors" title="Attach file">
+                  <span class="material-symbols-outlined text-outline-variant hover:text-on-surface-variant" style="font-size:17px">attach_file</span>
+                </label>
+                <input id="file-input-hero" type="file" class="hidden" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.py,.html,.css"/>
+                <button onclick="window._toggleArena()" class="flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container border border-outline-variant/15 text-[10px] font-semibold text-on-surface-variant hover:bg-surface-container-high transition-colors font-headline" style="font-family:Manrope" title="Compare models side by side">
+                  <span class="material-symbols-outlined" style="font-size:12px">compare</span> Arena
+                </button>
+              </div>
+              <div class="flex gap-5">
                 <button class="text-xs text-on-surface-variant hover:text-primary transition-colors" onclick="window._sendPrompt('Synthesize quarterly reports')">Synthesize quarterly reports</button>
                 <button class="text-xs text-on-surface-variant hover:text-primary transition-colors" onclick="window._sendPrompt('Draft the project manifesto')">Draft the project manifesto</button>
-                <button class="text-xs text-on-surface-variant hover:text-primary transition-colors" onclick="window._sendPrompt('Review architectural decisions')">Review architectural decisions</button>
+                <button class="text-xs text-on-surface-variant hover:text-primary transition-colors hidden lg:block" onclick="window._sendPrompt('Review architectural decisions')">Review architectural decisions</button>
               </div>
             </div>
           </div>
@@ -1676,7 +2073,7 @@ function renderChat() {
   }
 
   // ── Active chat: flex column, input pinned at bottom via flex ──────────────
-  return `
+  const chatBody = `
     <div class="flex-1 flex flex-col overflow-hidden" id="chat-wrapper">
       <!-- Scrollable messages -->
       <div class="flex-1 overflow-y-auto px-6 py-6" id="messages-scroll">
@@ -1684,81 +2081,129 @@ function renderChat() {
       </div>
 
       <!-- Input bar — stays at bottom via flexbox, NO position:fixed -->
-      <div class="flex-shrink-0 px-6 pb-5 pt-3 bg-surface border-t border-outline-variant/8">
+      <div class="flex-shrink-0 px-6 pb-5 pt-3 bg-surface border-t border-outline-variant/8" id="input-area">
         <div class="max-w-2xl mx-auto">
-          <div class="glass-panel flex items-center gap-2 rounded-xl border border-outline-variant/10 shadow-sm px-3 py-2 focus-within:border-primary/30 focus-within:shadow-md transition-all bg-surface-container-lowest/90">
-            <input id="chat-input" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant/50 py-2 px-1 font-body text-sm" placeholder="Message Taiga..." type="text" autocomplete="off" />
-            <button id="send-btn" class="p-2 bg-primary text-on-primary rounded-lg flex items-center justify-center shadow-sm hover:opacity-90 transition-all active:scale-95 shrink-0">
-              <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1">send</span>
-            </button>
+          <div class="glass-panel rounded-xl border border-outline-variant/10 shadow-sm focus-within:border-primary/30 focus-within:shadow-md transition-all bg-surface-container-lowest/90" id="input-box-wrap">
+            ${renderAttachmentStrip()}
+            <div class="flex items-center gap-2 px-3 py-2">
+              <input id="chat-input" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant/50 py-1.5 px-1 font-body text-sm" placeholder="Message Taiga..." type="text" autocomplete="off" />
+              <label for="file-input" class="cursor-pointer p-1.5 hover:bg-surface-container rounded-lg transition-colors shrink-0" title="Attach file">
+                <span class="material-symbols-outlined text-outline-variant hover:text-on-surface-variant" style="font-size:17px">attach_file</span>
+              </label>
+              <input id="file-input" type="file" class="hidden" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.py,.html,.css"/>
+              <button id="send-btn" class="p-2 bg-primary text-on-primary rounded-lg flex items-center justify-center shadow-sm hover:opacity-90 transition-all active:scale-95 shrink-0">
+                <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1">send</span>
+              </button>
+            </div>
+            <div class="flex items-center gap-2 px-3 pb-2">
+              ${renderModelPicker()}
+              <button onclick="window._toggleArena()" class="flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container border border-outline-variant/15 text-[10px] font-semibold text-on-surface-variant hover:bg-surface-container-high transition-colors font-headline" style="font-family:Manrope" title="Compare models side by side">
+                <span class="material-symbols-outlined" style="font-size:12px">compare</span> Arena
+              </button>
+              <span class="text-[9px] text-outline-variant/50 ml-auto">⌘K commands</span>
+            </div>
           </div>
         </div>
       </div>
     </div>`;
+
+  // If canvas is open, split view
+  if (state.canvasOpen) {
+    return `<div class="flex-1 flex overflow-hidden">${chatBody}${renderCanvas()}</div>`;
+  }
+  return chatBody;
 }
 
 function renderMindmap() {
   const catCount = state.mindmapNodes.filter(n => n.type === 'category').length;
   const presCount = state.mindmapNodes.filter(n => n.type === 'presence').length;
+
+  // ── Mode: Recipes/Workflow builder ───────────────────────────────────────
+  if (state.mindmapMode === 'recipes') {
+    return `<div class="flex-1 flex flex-col overflow-hidden">
+      <!-- Mode toggle tabs -->
+      <div class="flex items-center gap-1 px-5 pt-3 pb-0 border-b border-outline-variant/10 bg-surface-container-low flex-shrink-0">
+        <button onclick="window._setMindmapMode('skills')" class="px-4 py-2 text-xs font-bold font-headline rounded-t-lg border-b-2 border-transparent transition-colors ${state.mindmapMode==='skills' ? 'border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'}" style="font-family:Manrope">
+          <span class="flex items-center gap-1.5"><span class="material-symbols-outlined" style="font-size:14px">neurology</span> Skills Map</span>
+        </button>
+        <button onclick="window._setMindmapMode('recipes')" class="px-4 py-2 text-xs font-bold font-headline rounded-t-lg border-b-2 transition-colors ${state.mindmapMode==='recipes' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}" style="font-family:Manrope">
+          <span class="flex items-center gap-1.5"><span class="material-symbols-outlined" style="font-size:14px">account_tree</span> Workflows</span>
+        </button>
+      </div>
+      ${renderRecipesMode()}
+    </div>`;
+  }
+
+  // ── Mode: Skills mindmap (default) ───────────────────────────────────────
   return `
-    <div class="flex-1 relative overflow-hidden bg-surface-container-low mindmap-grid min-h-0 anim-slide-up" id="mindmap-canvas">
-
-      <!-- Subtle top-left status pill -->
-      <div class="absolute top-20 left-6 z-10 pointer-events-none">
-        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full glass-panel border border-outline-variant/10 shadow-sm">
-          <span class="w-1.5 h-1.5 rounded-full ${state.connected ? 'bg-emerald-400' : 'bg-red-400'}"></span>
-          <span class="text-[11px] font-semibold text-on-surface-variant tracking-wide">${catCount ? catCount + ' skills' : 'Skills & Agents'}</span>
-          ${presCount ? `<span class="w-px h-3 bg-outline-variant/40"></span><span class="text-[10px] text-orange-500 font-semibold">${presCount} connected</span>` : ''}
-        </div>
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <!-- Mode toggle tabs -->
+      <div class="flex items-center gap-1 px-5 pt-3 pb-0 border-b border-outline-variant/10 bg-surface-container-low flex-shrink-0">
+        <button onclick="window._setMindmapMode('skills')" class="px-4 py-2 text-xs font-bold font-headline rounded-t-lg border-b-2 transition-colors ${state.mindmapMode==='skills' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}" style="font-family:Manrope">
+          <span class="flex items-center gap-1.5"><span class="material-symbols-outlined" style="font-size:14px">neurology</span> Skills Map</span>
+        </button>
+        <button onclick="window._setMindmapMode('recipes')" class="px-4 py-2 text-xs font-bold font-headline rounded-t-lg border-b-2 transition-colors ${state.mindmapMode==='recipes' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}" style="font-family:Manrope">
+          <span class="flex items-center gap-1.5"><span class="material-symbols-outlined" style="font-size:14px">account_tree</span> Workflows</span>
+        </button>
       </div>
 
-      <!-- World -->
-      <div id="mindmap-world" style="position:absolute;left:0;top:0;width:5000px;height:5000px;transform-origin:0 0;transform:translate(${state.mapPanX}px,${state.mapPanY}px) scale(${state.mapScale})">
-        <svg id="mindmap-svg" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:5"></svg>
-        <div data-nodes-layer style="position:absolute;left:0;top:0;right:0;bottom:0;z-index:10">${mindmapNodesHTML()}</div>
-      </div>
+      <!-- Skills canvas -->
+      <div class="flex-1 relative overflow-hidden bg-surface-container-low mindmap-grid min-h-0" id="mindmap-canvas">
 
-      <!-- Monitor panel -->
-      ${state.monitorOpen ? `
-        <div class="absolute bottom-16 right-6 w-80 bg-surface-container-lowest border border-outline-variant/20 rounded-2xl shadow-xl overflow-hidden" style="z-index:35;max-height:400px;display:flex;flex-direction:column">
-          <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
-            <div class="flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
-              <span class="text-xs font-bold uppercase tracking-widest text-secondary">Claude Code Monitor</span>
-            </div>
-            <button onclick="window._toggleMonitor()" class="text-slate-400 hover:text-slate-600"><span class="material-symbols-outlined text-sm">close</span></button>
+        <!-- Subtle top-left status pill -->
+        <div class="absolute top-4 left-6 z-10 pointer-events-none">
+          <div class="flex items-center gap-2 px-3 py-1.5 rounded-full glass-panel border border-outline-variant/10 shadow-sm">
+            <span class="w-1.5 h-1.5 rounded-full ${state.connected ? 'bg-emerald-400' : 'bg-red-400'}"></span>
+            <span class="text-[11px] font-semibold text-on-surface-variant tracking-wide">${catCount ? catCount + ' skills' : 'Skills & Agents'}</span>
+            ${presCount ? `<span class="w-px h-3 bg-outline-variant/40"></span><span class="text-[10px] text-orange-500 font-semibold">${presCount} connected</span>` : ''}
           </div>
-          <div id="monitor-panel-body" class="overflow-y-auto p-4" style="max-height:340px">${renderMonitorContent()}</div>
-        </div>` : ''}
+        </div>
 
-      <!-- Unified bottom toolbar pill -->
-      <div class="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-1.5 glass-panel rounded-full shadow-md border border-outline-variant/10 z-30">
-        <!-- Add actions -->
-        <button title="Add Skill" onclick="window._showSkillModal()" class="p-2 hover:bg-primary/8 rounded-full transition-colors group">
-          <span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:text-primary transition-colors">extension</span>
-        </button>
-        <button title="Add Source" onclick="window._showAddSourceModal()" class="p-2 hover:bg-sky-500/8 rounded-full transition-colors group">
-          <span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:text-sky-500 transition-colors">link</span>
-        </button>
-        <button title="Add Tool" onclick="window._showAddToolModal()" class="p-2 hover:bg-purple-500/8 rounded-full transition-colors group">
-          <span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:text-purple-500 transition-colors">build</span>
-        </button>
-        <div class="w-px h-5 bg-outline-variant/25 mx-1"></div>
-        <!-- Zoom -->
-        <button title="Zoom in" onclick="(() => {const s=Math.min(4,window.__nordicState.mapScale*1.2);const c=document.getElementById('mindmap-canvas').getBoundingClientRect();const mx=c.width/2,my=c.height/2;window.__nordicState.mapPanX=mx-(mx-window.__nordicState.mapPanX)*(s/window.__nordicState.mapScale);window.__nordicState.mapPanY=my-(my-window.__nordicState.mapPanY)*(s/window.__nordicState.mapScale);window.__nordicState.mapScale=s;document.getElementById('mindmap-world').style.transform='translate('+window.__nordicState.mapPanX+'px,'+window.__nordicState.mapPanY+'px) scale('+s+')'})()" class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
-          <span class="material-symbols-outlined text-[18px] text-on-surface-variant">zoom_in</span>
-        </button>
-        <button title="Zoom out" onclick="(() => {const s=Math.max(0.1,window.__nordicState.mapScale*0.8);const c=document.getElementById('mindmap-canvas').getBoundingClientRect();const mx=c.width/2,my=c.height/2;window.__nordicState.mapPanX=mx-(mx-window.__nordicState.mapPanX)*(s/window.__nordicState.mapScale);window.__nordicState.mapPanY=my-(my-window.__nordicState.mapPanY)*(s/window.__nordicState.mapScale);window.__nordicState.mapScale=s;document.getElementById('mindmap-world').style.transform='translate('+window.__nordicState.mapPanX+'px,'+window.__nordicState.mapPanY+'px) scale('+s+')'})()" class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
-          <span class="material-symbols-outlined text-[18px] text-on-surface-variant">zoom_out</span>
-        </button>
-        <button title="Center view" onclick="window._resetMindmap()" class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
-          <span class="material-symbols-outlined text-[18px] text-on-surface-variant">center_focus_strong</span>
-        </button>
-        <div class="w-px h-5 bg-outline-variant/25 mx-1"></div>
-        <!-- Monitor toggle -->
-        <button title="Claude Code Monitor" onclick="window._toggleMonitor()" class="p-2 rounded-full transition-colors ${state.monitorOpen ? 'bg-orange-500/15' : 'hover:bg-surface-container-high'}">
-          <span class="material-symbols-outlined text-[18px] ${state.monitorOpen ? 'text-orange-500' : 'text-on-surface-variant'}">monitor_heart</span>
-        </button>
+        <!-- World -->
+        <div id="mindmap-world" style="position:absolute;left:0;top:0;width:5000px;height:5000px;transform-origin:0 0;transform:translate(${state.mapPanX}px,${state.mapPanY}px) scale(${state.mapScale})">
+          <svg id="mindmap-svg" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:5"></svg>
+          <div data-nodes-layer style="position:absolute;left:0;top:0;right:0;bottom:0;z-index:10">${mindmapNodesHTML()}</div>
+        </div>
+
+        <!-- Monitor panel -->
+        ${state.monitorOpen ? `
+          <div class="absolute bottom-16 right-6 w-80 bg-surface-container-lowest border border-outline-variant/20 rounded-2xl shadow-xl overflow-hidden" style="z-index:35;max-height:400px;display:flex;flex-direction:column">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
+                <span class="text-xs font-bold uppercase tracking-widest text-secondary">Claude Code Monitor</span>
+              </div>
+              <button onclick="window._toggleMonitor()" class="text-slate-400 hover:text-slate-600"><span class="material-symbols-outlined text-sm">close</span></button>
+            </div>
+            <div id="monitor-panel-body" class="overflow-y-auto p-4" style="max-height:340px">${renderMonitorContent()}</div>
+          </div>` : ''}
+
+        <!-- Unified bottom toolbar pill -->
+        <div class="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-1.5 glass-panel rounded-full shadow-md border border-outline-variant/10 z-30">
+          <button title="Add Skill" onclick="window._showSkillModal()" class="p-2 hover:bg-primary/8 rounded-full transition-colors group">
+            <span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:text-primary transition-colors">extension</span>
+          </button>
+          <button title="Add Source" onclick="window._showAddSourceModal()" class="p-2 hover:bg-sky-500/8 rounded-full transition-colors group">
+            <span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:text-sky-500 transition-colors">link</span>
+          </button>
+          <button title="Add Tool" onclick="window._showAddToolModal()" class="p-2 hover:bg-purple-500/8 rounded-full transition-colors group">
+            <span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:text-purple-500 transition-colors">build</span>
+          </button>
+          <div class="w-px h-5 bg-outline-variant/25 mx-1"></div>
+          <button title="Zoom in" onclick="(() => {const s=Math.min(4,window.__nordicState.mapScale*1.2);const c=document.getElementById('mindmap-canvas').getBoundingClientRect();const mx=c.width/2,my=c.height/2;window.__nordicState.mapPanX=mx-(mx-window.__nordicState.mapPanX)*(s/window.__nordicState.mapScale);window.__nordicState.mapPanY=my-(my-window.__nordicState.mapPanY)*(s/window.__nordicState.mapScale);window.__nordicState.mapScale=s;document.getElementById('mindmap-world').style.transform='translate('+window.__nordicState.mapPanX+'px,'+window.__nordicState.mapPanY+'px) scale('+s+')'})()" class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+            <span class="material-symbols-outlined text-[18px] text-on-surface-variant">zoom_in</span>
+          </button>
+          <button title="Zoom out" onclick="(() => {const s=Math.max(0.1,window.__nordicState.mapScale*0.8);const c=document.getElementById('mindmap-canvas').getBoundingClientRect();const mx=c.width/2,my=c.height/2;window.__nordicState.mapPanX=mx-(mx-window.__nordicState.mapPanX)*(s/window.__nordicState.mapScale);window.__nordicState.mapPanY=my-(my-window.__nordicState.mapPanY)*(s/window.__nordicState.mapScale);window.__nordicState.mapScale=s;document.getElementById('mindmap-world').style.transform='translate('+window.__nordicState.mapPanX+'px,'+window.__nordicState.mapPanY+'px) scale('+s+')'})()" class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+            <span class="material-symbols-outlined text-[18px] text-on-surface-variant">zoom_out</span>
+          </button>
+          <button title="Center view" onclick="window._resetMindmap()" class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+            <span class="material-symbols-outlined text-[18px] text-on-surface-variant">center_focus_strong</span>
+          </button>
+          <div class="w-px h-5 bg-outline-variant/25 mx-1"></div>
+          <button title="Claude Code Monitor" onclick="window._toggleMonitor()" class="p-2 rounded-full transition-colors ${state.monitorOpen ? 'bg-orange-500/15' : 'hover:bg-surface-container-high'}">
+            <span class="material-symbols-outlined text-[18px] ${state.monitorOpen ? 'text-orange-500' : 'text-on-surface-variant'}">monitor_heart</span>
+          </button>
+        </div>
       </div>
     </div>`;
 }
@@ -1808,7 +2253,32 @@ function render() {
           <span class="new-chat-btn-text">New Chat</span>
         </button>
         
-        <nav class="flex-1 space-y-2 overflow-y-auto" id="sidebar-panel-content">
+        <nav class="flex-1 overflow-y-auto" id="sidebar-panel-content">
+          ${(() => {
+            const convs = state.conversations.slice(0, 40);
+            if (!convs.length) return `<div class="text-[11px] text-on-surface-variant/50 text-center py-8 px-2">No conversations yet.<br/>Start chatting to save history.</div>`;
+            // Group by date
+            const today = new Date(); today.setHours(0,0,0,0);
+            const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+            const groups = { Today: [], Yesterday: [], Earlier: [] };
+            for (const c of convs) {
+              const d = new Date(c.updatedAt); d.setHours(0,0,0,0);
+              if (d >= today) groups.Today.push(c);
+              else if (d >= yesterday) groups.Yesterday.push(c);
+              else groups.Earlier.push(c);
+            }
+            return Object.entries(groups).filter(([,arr])=>arr.length).map(([label, arr]) => `
+              <div class="pt-3 pb-1">
+                <div class="px-4 text-[9px] font-bold uppercase tracking-widest text-outline-variant/60 mb-1">${label}</div>
+                ${arr.map(c => `<div onclick="loadConversation('${c.id}')" class="sidebar-item-padding group flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer hover:bg-[#fbfdfc]/60 transition-colors ${c.id === state.activeConvId ? 'bg-[#fbfdfc] text-[#506A58] font-semibold shadow-sm' : 'text-[#506A58]/70'}">
+                  <span class="material-symbols-outlined shrink-0 text-base">chat_bubble</span>
+                  <span class="flex-1 text-xs truncate sidebar-item-text">${escapeHtml(c.title)}</span>
+                  <button onclick="event.stopPropagation();deleteConversation('${c.id}')" class="opacity-0 group-hover:opacity-100 shrink-0 p-0.5 rounded text-outline-variant hover:text-red-400 transition-all sidebar-item-text" title="Delete">
+                    <span class="material-symbols-outlined" style="font-size:13px">close</span>
+                  </button>
+                </div>`).join('')}
+              </div>`).join('');
+          })()}
         </nav>
         
         <div class="pt-6 border-t border-outline-variant/10 space-y-2 shrink-0">
@@ -1868,6 +2338,9 @@ function render() {
         <span class="text-[10px] font-label">Mindmap</span>
       </a>
     </nav>
+
+    <!-- Command Palette (top-layer overlay) -->
+    ${renderPalette()}
   `;
 
   ['chat-input', 'chat-input-hero'].forEach((id, idx) => {
@@ -1887,6 +2360,21 @@ function render() {
       input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; });
     }
   });
+
+  // Wire file inputs
+  wireAttachHandler();
+  const heroFileInput = document.getElementById('file-input-hero');
+  if (heroFileInput) heroFileInput.onchange = e => { for (const f of e.target.files) handleFileAttach(f); heroFileInput.value = ''; };
+
+  // Drag-and-drop onto the input area
+  const inputArea = document.getElementById('input-area') || document.getElementById('messages-scroll');
+  if (inputArea) {
+    inputArea.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+    inputArea.addEventListener('drop', e => { e.preventDefault(); for (const f of e.dataTransfer.files) handleFileAttach(f); });
+  }
+
+  // Focus palette input if open
+  if (state.paletteOpen) requestAnimationFrame(() => document.getElementById('palette-input')?.focus());
 
   renderSidebarPanel();
   if (state.view === 'chat') renderMessages();
@@ -2310,6 +2798,154 @@ window._resetMindmap = () => {
   const nodesDiv = document.querySelector('[data-nodes-layer]');
   if (nodesDiv) { nodesDiv.innerHTML = mindmapNodesHTML(); updateMindmapLines(); applyWorldTransform(); }
 };
+
+// ── New feature handlers ───────────────────────────────────────────────────────
+
+// Model picker
+window._toggleModelPicker = () => { state.modelPickerOpen = !state.modelPickerOpen; render(); };
+window._selectModel = (id) => {
+  state.currentModel = id;
+  localStorage.setItem('nordic-model', id);
+  state.modelPickerOpen = false;
+  showToast('Model: ' + modelLabel(id));
+  render();
+};
+
+// Command palette
+window._closePalette = () => { state.paletteOpen = false; state.paletteQuery = ''; state.paletteIdx = 0; render(); };
+window._paletteInput = (val) => { state.paletteQuery = val.toLowerCase(); state.paletteIdx = 0; const el = document.getElementById('palette-input'); const items = paletteItems(); const idx = state.paletteIdx; const wrap = document.querySelector('#palette-results'); if (wrap) wrap.innerHTML = items.map((item, i) => `<div onclick="window._paletteSelect(${i})" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${i === idx ? 'bg-surface-container-low' : 'hover:bg-surface-container-low'}"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:17px">${item.icon}</span><div class="flex-1 min-w-0"><div class="text-[12px] font-semibold text-on-surface font-headline truncate" style="font-family:Manrope">${escapeHtml(item.label)}</div>${item.sub ? `<div class="text-[10px] text-on-surface-variant">${escapeHtml(item.sub)}</div>` : ''}</div>${item.kbd ? `<span class="text-[10px] font-semibold text-outline-variant border border-outline-variant/20 rounded px-1.5 py-0.5 font-headline" style="font-family:Manrope">${item.kbd}</span>` : ''}</div>`).join('') || '<div class="px-4 py-6 text-center text-xs text-outline-variant">No results</div>'; };
+window._paletteKey = (e) => {
+  const items = paletteItems();
+  if (e.key === 'ArrowDown') { e.preventDefault(); state.paletteIdx = Math.min(state.paletteIdx + 1, items.length - 1); render(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); state.paletteIdx = Math.max(state.paletteIdx - 1, 0); render(); }
+  else if (e.key === 'Enter') { e.preventDefault(); window._paletteSelect(state.paletteIdx); }
+  else if (e.key === 'Escape') { window._closePalette(); }
+};
+window._paletteSelect = (i) => {
+  const items = paletteItems();
+  const item = items[i];
+  if (!item) return;
+  window._closePalette();
+  if (item.type === 'conv') { loadConversation(item.id); }
+  else if (item.action) {
+    const fn = window[item.action];
+    if (typeof fn === 'function') fn();
+  }
+};
+
+// Arena
+window._toggleArena = () => { state.arenaMode = !state.arenaMode; state.arenaResponses = {}; render(); };
+window._arenaSend = () => {
+  const input = document.getElementById('arena-input');
+  const prompt = input?.value?.trim();
+  if (!prompt) return;
+  if (input) input.value = '';
+  document.getElementById('arena-input-val')?.setAttribute('value', prompt);
+  state.arenaResponses = {};
+  const arenaBody = document.getElementById('arena-body');
+  if (arenaBody) arenaBody.innerHTML = arenaBodyHTML(prompt);
+  ARENA_MODELS.forEach(m => arenaCall(m.id, prompt));
+};
+window._arenaUse = (modelId) => {
+  const resp = state.arenaResponses[modelId];
+  if (!resp?.text) return;
+  state.arenaMode = false;
+  state.view = 'chat';
+  location.hash = '#chat';
+  render();
+  setTimeout(() => appendMessage('assistant', resp.text), 100);
+};
+window._arenaContinue = (modelId) => {
+  const resp = state.arenaResponses[modelId];
+  if (!resp?.text) return;
+  state.arenaMode = false;
+  state.currentModel = ARENA_MODELS.find(m => m.id === modelId) ? 'google/' + modelId : state.currentModel;
+  state.view = 'chat';
+  location.hash = '#chat';
+  appendMessage('assistant', resp.text);
+  render();
+};
+
+// Recipes / Workflow
+window._setMindmapMode = (mode) => { state.mindmapMode = mode; render(); if (mode === 'skills') requestAnimationFrame(() => { initMindmap(); updateMindmapLines(); }); };
+window._selectRecipe = (id) => { state.activeRecipeId = id || null; render(); };
+window._saveRecipe = () => {
+  const name = prompt('Recipe name:', state.recipes.find(r => r.id === state.activeRecipeId)?.name || 'My Workflow') || 'My Workflow';
+  if (!name.trim()) return;
+  if (state.activeRecipeId) {
+    const r = state.recipes.find(r => r.id === state.activeRecipeId);
+    if (r) r.name = name.trim();
+  } else {
+    const id = 'rec-' + Date.now();
+    state.recipes.unshift({ id, name: name.trim(), nodes: [], createdAt: Date.now() });
+    state.activeRecipeId = id;
+  }
+  saveRecipes();
+  render();
+  showToast('Recipe saved');
+};
+window._runRecipe = () => {
+  const recipe = state.recipes.find(r => r.id === state.activeRecipeId);
+  if (!recipe || !recipe.nodes.length) { showToast('Add some steps first'); return; }
+  state.view = 'chat';
+  location.hash = '#chat';
+  render();
+  const prompt = `Run this workflow:\n${recipe.nodes.map((n,i) => `Step ${i+1}: ${n.type}${n.config ? ' — ' + n.config : ''}`).join('\n')}\n\nExecute each step in order.`;
+  setTimeout(() => { appendMessage('user', `Run workflow: ${recipe.name}`); gw.chatSend(prompt, state.sessionKey).catch(e => appendMessage('assistant', 'Error: ' + e.message)); state.streaming = true; updateSendBtn(); updateStreamingMessage(); }, 100);
+};
+window._addRecipeStep = () => {
+  if (!state.activeRecipeId) { showToast('Save the recipe first'); window._saveRecipe(); return; }
+  const type = STEP_TYPES[0].id;
+  const recipe = state.recipes.find(r => r.id === state.activeRecipeId);
+  if (recipe) { recipe.nodes.push({ type, config: '' }); saveRecipes(); render(); }
+};
+window._quickAddStep = (type) => {
+  if (!state.activeRecipeId) { state.recipes.unshift({ id: 'rec-' + Date.now(), name: 'My Workflow', nodes: [], createdAt: Date.now() }); state.activeRecipeId = state.recipes[0].id; saveRecipes(); }
+  const recipe = state.recipes.find(r => r.id === state.activeRecipeId);
+  if (recipe) { recipe.nodes.push({ type, config: '' }); saveRecipes(); render(); }
+};
+window._editRecipeNode = (recipeId, idx) => {
+  const recipe = state.recipes.find(r => r.id === recipeId);
+  if (!recipe) return;
+  const node = recipe.nodes[idx];
+  if (!node) return;
+  const config = prompt(`Configure "${node.type}" step:`, node.config || '');
+  if (config !== null) { node.config = config; saveRecipes(); render(); }
+};
+window._removeRecipeNode = (recipeId, idx) => {
+  const recipe = state.recipes.find(r => r.id === recipeId);
+  if (recipe) { recipe.nodes.splice(idx, 1); saveRecipes(); render(); }
+};
+
+// Canvas
+window._closeCanvas = () => { state.canvasOpen = false; state.activeArtifactId = null; render(); };
+
+// Attachments
+window._removeAttachment = (id) => {
+  state.attachments = state.attachments.filter(a => a.id !== id);
+  const strip = document.getElementById('attachment-strip');
+  if (strip) { strip.outerHTML = renderAttachmentStrip(); wireAttachHandler(); }
+};
+
+// Nav shortcuts
+window._goChat = () => { state.view = 'chat'; location.hash = '#chat'; render(); };
+window._goMindmap = () => { state.view = 'mindmap'; location.hash = '#mindmap'; render(); };
+window._toggleDark = () => { document.documentElement.classList.toggle('dark'); };
+
+// Keyboard shortcuts — ⌘K palette, ⌘N new chat, ⌘1/⌘2 nav
+document.removeEventListener('keydown', window.__nordicKeyHandler || (() => {}));
+window.__nordicKeyHandler = (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); state.paletteOpen = !state.paletteOpen; if (!state.paletteOpen) { state.paletteQuery = ''; state.paletteIdx = 0; } render(); }
+  else if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); window._newSession(); }
+  else if ((e.metaKey || e.ctrlKey) && e.key === '1') { e.preventDefault(); window._goChat(); }
+  else if ((e.metaKey || e.ctrlKey) && e.key === '2') { e.preventDefault(); window._goMindmap(); }
+  else if (e.key === 'Escape' && state.paletteOpen) { window._closePalette(); }
+};
+document.addEventListener('keydown', window.__nordicKeyHandler);
+
+// Auto-save conversations after each assistant message
+const _origAppendMessage = window._appendMessageHook;
+window._appendMessageHook = (role, text) => { if (role === 'assistant' && text) createConversation(); };
 
 render();
 
