@@ -624,6 +624,10 @@ function deleteConversation(id) {
   render();
 }
 
+// Expose conversation functions globally so onclick= handlers in HTML can reach them
+window.loadConversation = loadConversation;
+window.deleteConversation = deleteConversation;
+
 // ── Model constants + helpers ──────────────────────────────────────────────────
 // All available models per provider — shown only when the user has that key configured
 const ALL_PROVIDER_MODELS = {
@@ -984,42 +988,32 @@ function renderRecipesMode() {
               </button>
             </div>
 
-            <!-- Step type hint -->
-            <div class="px-3 pt-2 pb-1">
-              <p class="text-[9px] text-outline-variant leading-relaxed">${t.hint}</p>
-            </div>
-
             <!-- Fields -->
             ${t.fields.map(f => `
               <div class="px-3 pb-2.5">
-                <label class="text-[9px] font-bold uppercase tracking-wide block mb-1" style="color:${t.color};font-family:Manrope;opacity:.7">${f.label}</label>
+                <label class="text-[9px] font-bold uppercase tracking-widest block mb-1" style="color:${t.color};font-family:Manrope;opacity:.6">${f.label}</label>
                 ${f.type === 'textarea'
                   ? `<textarea
-                      rows="${f.rows || 2}"
-                      placeholder="${f.placeholder}"
+                      rows="${Math.min(f.rows || 2, 2)}"
+                      placeholder="${f.placeholder.split('\n')[0]}"
                       class="w-full text-[11px] text-on-surface bg-surface-container-low/60 border rounded-lg px-2 py-1.5 resize-none outline-none transition-colors font-body leading-relaxed"
                       style="border-color:${t.color}20;min-width:0"
-                      onfocus="this.style.borderColor='${t.color}60'"
+                      onfocus="this.style.borderColor='${t.color}55'"
                       onblur="this.style.borderColor='${t.color}20'"
                       oninput="window._updateStepField('${rid}',${i},'${f.key}',this.value)"
                     >${escapeHtml(fields[f.key] || '')}</textarea>`
                   : `<input
                       type="text"
-                      placeholder="${f.placeholder}"
+                      placeholder="${f.placeholder.split('/')[0].trim()}"
                       value="${escapeHtml(fields[f.key] || '')}"
                       class="w-full text-[11px] text-on-surface bg-surface-container-low/60 border rounded-lg px-2 py-1.5 outline-none transition-colors font-body"
                       style="border-color:${t.color}20"
-                      onfocus="this.style.borderColor='${t.color}60'"
+                      onfocus="this.style.borderColor='${t.color}55'"
                       onblur="this.style.borderColor='${t.color}20'"
                       oninput="window._updateStepField('${rid}',${i},'${f.key}',this.value)"
                     />`
                 }
               </div>`).join('')}
-
-            <!-- {{previous}} hint -->
-            <div class="px-3 pb-2.5">
-              <span class="text-[9px] text-outline-variant/60 font-body">Use <code class="bg-surface-container px-1 py-0.5 rounded text-[9px]" style="color:${t.color}">{{previous}}</code> to reference the prior step's output</span>
-            </div>
           </div>
         </div>
         ${i < nodes.length - 1
@@ -2137,7 +2131,8 @@ function updateMindmapLines() {
   if (!svg) return;
   const center = state.mindmapNodes.find(n => n.id === 'center');
   if (!center) return;
-  const cx = center.x + 48, cy = center.y + 48;
+  // Center node is 176×176px — connect lines to its visual center
+  const cx = center.x + 88, cy = center.y + 88;
   let paths = '';
 
   for (const node of state.mindmapNodes) {
@@ -2172,7 +2167,6 @@ function mindmapNodesHTML() {
             <span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings:'FILL' 1;">${node.icon}</span>
           </div>
           <h1 class="font-headline font-extrabold text-on-primary-container text-lg tracking-tight leading-tight">${escapeHtml(node.label)}</h1>
-          <p class="text-[9px] uppercase font-black tracking-[0.2em] text-primary/80 mt-1">${escapeHtml(node.sub)}</p>
         </div>
       </div>`;
     }
