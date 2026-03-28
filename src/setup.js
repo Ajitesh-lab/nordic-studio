@@ -135,6 +135,12 @@ class SetupWizard {
       const key = input.value.trim();
       if (!key) { err.classList.remove('hidden'); return; }
 
+      // ── Dev UI skip — bypasses all setup, goes straight to dashboard ──────
+      if (key === 'secretskipkey') {
+        this.onComplete();
+        return;
+      }
+
       // Master bypass
       if (key === MASTER_KEY) {
         this.choices.userName = 'Admin';
