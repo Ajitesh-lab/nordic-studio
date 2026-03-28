@@ -59,6 +59,8 @@ const state = window.__nordicState || {
   customTools: JSON.parse(localStorage.getItem('nordic-custom-tools') || '[]'),
   // ── File attachments (current turn) ───────────────────────────────────────
   attachments: [],
+  // ── Plus-menu (input bar attachment popup) ────────────────────────────────
+  plusMenuOpen: false,
 };
 window.__nordicState = state;
 
@@ -2298,10 +2300,66 @@ function mindmapNodesHTML() {
 }
 
 // ── View renderers ────────────────────────────────────────────────────────────
-function renderChat() {
-  // ── Arena mode overrides normal chat ──────────────────────────────────────
-  if (state.arenaMode) return renderArena();
+// ── Shared input bar used in both empty + active chat states ─────────────────
+function renderInputBar() {
+  const modelDropup = state.modelPickerOpen ? `
+    <div class="absolute bottom-full right-0 mb-2 bg-surface-container-lowest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-50 min-w-[220px]">
+      ${getModels().map(m => `<div onclick="window._selectModel('${m.id}')" class="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-container transition-colors ${state.currentModel === m.id ? 'bg-surface-container-low' : ''}">
+        <span class="material-symbols-outlined text-primary" style="font-size:16px">${m.icon}</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-xs font-bold text-on-surface" style="font-family:Manrope">${m.label}</div>
+          <div class="text-[10px] text-on-surface-variant">${m.note}</div>
+        </div>
+        ${state.currentModel === m.id ? '<span class="material-symbols-outlined text-primary" style="font-size:14px">check</span>' : ''}
+      </div>`).join('')}
+    </div>` : '';
 
+  const plusDropup = state.plusMenuOpen ? `
+    <div class="absolute bottom-full left-0 mb-2 bg-surface-container-lowest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-50 min-w-[180px]" id="plus-menu">
+      <label for="file-input" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container transition-colors" onclick="window._togglePlusMenu()">
+        <span class="material-symbols-outlined text-primary" style="font-size:17px">attach_file</span>
+        <span class="text-sm text-on-surface font-medium">Attach file</span>
+      </label>
+      <label for="file-input" class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-surface-container transition-colors" onclick="window._togglePlusMenu()">
+        <span class="material-symbols-outlined text-primary" style="font-size:17px">image</span>
+        <span class="text-sm text-on-surface font-medium">Add photo</span>
+      </label>
+    </div>` : '';
+
+  return `
+    <div class="glass-panel rounded-2xl border border-outline-variant/10 shadow-sm focus-within:border-primary/30 focus-within:shadow-md transition-all" id="input-box-wrap">
+      ${renderAttachmentStrip()}
+      <div class="flex items-center gap-2 px-3 py-2.5">
+        <!-- + popup button -->
+        <div class="relative flex-shrink-0">
+          <button onclick="window._togglePlusMenu()" class="w-8 h-8 flex items-center justify-center rounded-full border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors" title="Attach or add">
+            <span class="material-symbols-outlined" style="font-size:18px">add</span>
+          </button>
+          ${plusDropup}
+        </div>
+        <input id="file-input" type="file" class="hidden" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.py,.html,.css"/>
+
+        <!-- Textarea -->
+        <textarea id="chat-input" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant/50 resize-none py-1 text-sm font-body leading-relaxed min-h-[28px] max-h-[160px]" placeholder="Message Taiga…" rows="1" autocomplete="off"></textarea>
+
+        <!-- Model selector (shows short name only, dropdown opens upward) -->
+        <div class="relative flex-shrink-0">
+          <button onclick="window._toggleModelPicker()" class="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-on-surface-variant hover:bg-surface-container transition-colors whitespace-nowrap" style="font-family:Manrope" title="Switch model">
+            ${escapeHtml(modelLabel(state.currentModel))}
+            <span class="material-symbols-outlined" style="font-size:11px">${state.modelPickerOpen ? 'expand_more' : 'expand_less'}</span>
+          </button>
+          ${modelDropup}
+        </div>
+
+        <!-- Send -->
+        <button id="send-btn" class="w-8 h-8 flex items-center justify-center bg-primary text-on-primary rounded-full shadow-sm hover:opacity-90 transition-all active:scale-95 shrink-0">
+          <span class="material-symbols-outlined" style="font-size:16px;font-variation-settings:'FILL' 1">send</span>
+        </button>
+      </div>
+    </div>`;
+}
+
+function renderChat() {
   const isEmpty = state.messages.length === 0;
   const hr = new Date().getHours();
   const greeting = hr < 12 ? 'Good morning.' : hr < 17 ? 'Good afternoon.' : 'Good evening.';
@@ -2317,30 +2375,7 @@ function renderChat() {
               Your workspace is ready. What shall we work on?
             </p>
           </div>
-
-          <div class="w-full glass-panel rounded-2xl border border-outline-variant/10 shadow-sm">
-            ${renderAttachmentStrip()}
-            <div class="flex items-end gap-3 px-4 pt-4 pb-3">
-              <textarea id="chat-input-hero" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant/50 resize-none py-1 text-base font-body leading-relaxed min-h-[44px]" placeholder="Enter your thoughts here..." rows="1" autofocus></textarea>
-              <button id="send-btn-hero" class="flex items-center justify-center w-10 h-10 bg-primary text-on-primary rounded-xl shadow-sm transition-transform active:scale-95 shrink-0">
-                <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1">send</span>
-              </button>
-            </div>
-            <div class="flex items-center justify-between px-4 py-2.5 border-t border-outline-variant/8">
-              <div class="flex items-center gap-3">
-                ${renderModelPicker()}
-                <label for="file-input-hero" class="cursor-pointer p-1.5 hover:bg-surface-container rounded-lg transition-colors" title="Attach file">
-                  <span class="material-symbols-outlined text-outline-variant hover:text-on-surface-variant" style="font-size:17px">attach_file</span>
-                </label>
-                <input id="file-input-hero" type="file" class="hidden" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.py,.html,.css"/>
-              </div>
-              <div class="flex gap-5">
-                <button class="cta-underline" onclick="window._sendPrompt('Synthesize quarterly reports')">Synthesize quarterly reports</button>
-                <button class="cta-underline" onclick="window._sendPrompt('Draft the project manifesto')">Draft the project manifesto</button>
-                <button class="cta-underline hidden lg:block" onclick="window._sendPrompt('Review architectural decisions')">Review architectural decisions</button>
-              </div>
-            </div>
-          </div>
+          ${renderInputBar()}
         </div>
       </div>`;
   }
@@ -2356,23 +2391,7 @@ function renderChat() {
       <!-- Input bar — stays at bottom via flexbox, NO position:fixed -->
       <div class="flex-shrink-0 px-6 pb-5 pt-3 bg-surface border-t border-outline-variant/8" id="input-area">
         <div class="max-w-2xl mx-auto">
-          <div class="glass-panel rounded-xl border border-outline-variant/10 shadow-sm focus-within:border-primary/30 focus-within:shadow-md transition-all bg-surface-container-lowest/90" id="input-box-wrap">
-            ${renderAttachmentStrip()}
-            <div class="flex items-center gap-2 px-3 py-2">
-              <input id="chat-input" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant/50 py-1.5 px-1 font-body text-sm" placeholder="Message Taiga..." type="text" autocomplete="off" />
-              <label for="file-input" class="cursor-pointer p-1.5 hover:bg-surface-container rounded-lg transition-colors shrink-0" title="Attach file (or drag & drop)">
-                <span class="material-symbols-outlined text-outline-variant hover:text-on-surface-variant" style="font-size:17px">attach_file</span>
-              </label>
-              <input id="file-input" type="file" class="hidden" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.py,.html,.css"/>
-              <button id="send-btn" class="p-2 bg-primary text-on-primary rounded-lg flex items-center justify-center shadow-sm hover:opacity-90 transition-all active:scale-95 shrink-0">
-                <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1">send</span>
-              </button>
-            </div>
-            <div class="flex items-center gap-2 px-3 pb-2 border-t border-outline-variant/8 pt-1.5">
-              ${renderModelPicker()}
-              <span class="text-[9px] text-outline-variant/40 ml-auto">⌘K</span>
-            </div>
-          </div>
+          ${renderInputBar()}
         </div>
       </div>
     </div>`;
@@ -2485,12 +2504,10 @@ window._toggleSidebar = () => {
 };
 
 window._sendPrompt = (text) => {
-  if (text && state.messages.length === 0) {
+  if (text) {
     sendMessage(text);
     render();
     setTimeout(() => document.getElementById('chat-input')?.focus(), 50);
-  } else if (text) {
-    sendMessage(text);
   }
 };
 
@@ -2617,28 +2634,37 @@ function render() {
     ${renderPalette()}
   `;
 
-  ['chat-input', 'chat-input-hero'].forEach((id, idx) => {
-    const input = document.getElementById(id);
-    const sendBtn = document.getElementById(idx === 0 ? 'send-btn' : 'send-btn-hero');
-    if (input && sendBtn) {
-      const doSend = () => {
-        const t = input.value.trim();
-        if (t) {
-          window._sendPrompt(t);
-          input.value = '';
-          input.style.height = 'auto';
-        }
-      };
-      sendBtn.onclick = doSend;
-      input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
-      input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; });
-    }
-  });
+  // ── Wire single input bar (used in both empty + active states) ──────────────
+  const chatInput = document.getElementById('chat-input');
+  const sendBtn   = document.getElementById('send-btn');
+  if (chatInput && sendBtn) {
+    const doSend = () => {
+      const t = chatInput.value.trim();
+      if (t) {
+        window._sendPrompt(t);
+        chatInput.value = '';
+        chatInput.style.height = 'auto';
+      }
+    };
+    sendBtn.onclick = doSend;
+    chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
+    chatInput.addEventListener('input', () => { chatInput.style.height = 'auto'; chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px'; });
+    // Auto-focus when view is chat
+    if (state.view === 'chat') requestAnimationFrame(() => chatInput.focus());
+  }
 
-  // Wire file inputs
+  // Wire file input (shared single input)
   wireAttachHandler();
-  const heroFileInput = document.getElementById('file-input-hero');
-  if (heroFileInput) heroFileInput.onchange = e => { for (const f of e.target.files) handleFileAttach(f); heroFileInput.value = ''; };
+
+  // Close plus-menu or model-picker when clicking outside
+  document.addEventListener('click', e => {
+    if (state.plusMenuOpen && !e.target.closest('#plus-menu') && !e.target.closest('[onclick*="_togglePlusMenu"]')) {
+      state.plusMenuOpen = false; render();
+    }
+    if (state.modelPickerOpen && !e.target.closest('[onclick*="_toggleModelPicker"]') && !e.target.closest('[onclick*="_selectModel"]')) {
+      state.modelPickerOpen = false; render();
+    }
+  }, { once: true });
 
   // Drag-and-drop onto the input area
   const inputArea = document.getElementById('input-area') || document.getElementById('messages-scroll');
@@ -2666,6 +2692,8 @@ window._newSession = () => {
   state.attachments = [];
   state.canvasOpen = false;
   state.artifacts = [];
+  state.plusMenuOpen = false;
+  state.modelPickerOpen = false;
   localStorage.removeItem('nordic-active-conv');
   render();
   showToast('New session started');
@@ -3081,7 +3109,8 @@ window._resetMindmap = () => {
 // ── New feature handlers ───────────────────────────────────────────────────────
 
 // Model picker
-window._toggleModelPicker = () => { state.modelPickerOpen = !state.modelPickerOpen; render(); };
+window._toggleModelPicker = () => { state.modelPickerOpen = !state.modelPickerOpen; state.plusMenuOpen = false; render(); };
+window._togglePlusMenu = () => { state.plusMenuOpen = !state.plusMenuOpen; state.modelPickerOpen = false; render(); };
 window._selectModel = (id) => {
   state.currentModel = id;
   localStorage.setItem('nordic-model', id);
