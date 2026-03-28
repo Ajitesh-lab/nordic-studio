@@ -1,5 +1,9 @@
 import { Gateway } from './gateway.js';
 
+// ── Biome version ─────────────────────────────────────────────────────────────
+// App: Biome | Codenames: Taiga (v1), Tundra (v2), Savanna (v3)…
+const BIOME = { codename: 'Taiga', major: 1, minor: 0, full: 'Biome Taiga' };
+
 // ── State ─────────────────────────────────────────────────────────────────────
 const _freshSessionKey = () => 'ns-' + Date.now();
 const state = window.__nordicState || {
@@ -621,14 +625,56 @@ function deleteConversation(id) {
 }
 
 // ── Model constants + helpers ──────────────────────────────────────────────────
-const MODELS = [
-  { id: 'google/gemini-2.0-flash',        label: 'Gemini 2.0 Flash',  note: 'Fast, cost-efficient',       icon: 'bolt' },
-  { id: 'google/gemini-2.5-pro',          label: 'Gemini 2.5 Pro',    note: 'Best for complex reasoning', icon: 'smart_toy' },
-  { id: 'google/gemini-2.5-flash',        label: 'Gemini 2.5 Flash',  note: 'Balanced speed & quality',   icon: 'electric_bolt' },
-  { id: 'google/gemini-2.0-flash-thinking', label: 'Gemini Thinking', note: 'Deep reasoning mode',        icon: 'psychology' },
-];
+// All available models per provider — shown only when the user has that key configured
+const ALL_PROVIDER_MODELS = {
+  gemini: [
+    { id: 'google/gemini-2.0-flash',           label: 'Gemini 2.0 Flash',    note: 'Fast · free tier',           icon: 'bolt' },
+    { id: 'google/gemini-2.5-flash',           label: 'Gemini 2.5 Flash',    note: 'Balanced speed & quality',   icon: 'electric_bolt' },
+    { id: 'google/gemini-2.5-pro',             label: 'Gemini 2.5 Pro',      note: 'Best reasoning',             icon: 'smart_toy' },
+    { id: 'google/gemini-2.0-flash-thinking',  label: 'Gemini Thinking',     note: 'Deep reasoning mode',        icon: 'psychology' },
+  ],
+  anthropic: [
+    { id: 'anthropic/claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet', note: 'Best of Claude',           icon: 'auto_awesome' },
+    { id: 'anthropic/claude-3-5-haiku-20241022',  label: 'Claude 3.5 Haiku',  note: 'Fast & affordable',        icon: 'bolt' },
+    { id: 'anthropic/claude-3-opus-20240229',      label: 'Claude 3 Opus',    note: 'Most capable',             icon: 'psychology' },
+  ],
+  openai: [
+    { id: 'openai/gpt-4o',        label: 'GPT-4o',    note: 'OpenAI flagship', icon: 'smart_toy' },
+    { id: 'openai/gpt-4o-mini',   label: 'GPT-4o mini', note: 'Fast & cheap', icon: 'bolt' },
+    { id: 'openai/o1-preview',    label: 'o1 Preview', note: 'Deep reasoning', icon: 'psychology' },
+  ],
+  grok: [
+    { id: 'xai/grok-2',        label: 'Grok-2',       note: 'xAI · real-time X data', icon: 'bolt' },
+    { id: 'xai/grok-2-vision', label: 'Grok-2 Vision', note: 'xAI · image support',   icon: 'image' },
+  ],
+  mistral: [
+    { id: 'mistral/mistral-large-latest', label: 'Mistral Large', note: 'Top tier',       icon: 'flare' },
+    { id: 'mistral/mistral-nemo',         label: 'Mistral Nemo',  note: 'Fast & compact', icon: 'bolt' },
+  ],
+  perplexity: [
+    { id: 'perplexity/llama-3.1-sonar-large-128k-online', label: 'Sonar Large',  note: 'Perplexity · live web', icon: 'travel_explore' },
+    { id: 'perplexity/llama-3.1-sonar-small-128k-online', label: 'Sonar Small',  note: 'Perplexity · fast',     icon: 'travel_explore' },
+  ],
+};
 
-function modelLabel(id) { return (MODELS.find(m => m.id === id) || MODELS[0]).label; }
+// Build live MODELS list from stored keys — always include Gemini as fallback
+function buildModels() {
+  const list = [];
+  const PROVIDER_KEYS = ['gemini', 'anthropic', 'openai', 'grok', 'mistral', 'perplexity'];
+  for (const pid of PROVIDER_KEYS) {
+    if (localStorage.getItem(`biome-key-${pid}`) || (pid === 'gemini' && localStorage.getItem('biome-api-key'))) {
+      list.push(...(ALL_PROVIDER_MODELS[pid] || []));
+    }
+  }
+  // Always have at least Gemini Flash as default
+  if (!list.length) list.push(...ALL_PROVIDER_MODELS.gemini);
+  return list;
+}
+
+// Reactive model list — rebuild on each access
+function getModels() { return buildModels(); }
+
+function modelLabel(id) { return (getModels().find(m => m.id === id) || getModels()[0] || { label: id }).label; }
 
 function renderModelPicker() {
   if (!state.modelPickerOpen) {
@@ -645,7 +691,7 @@ function renderModelPicker() {
       <span class="material-symbols-outlined" style="font-size:11px">expand_less</span>
     </button>
     <div class="absolute top-full left-0 mt-1 bg-surface-container-lowest border border-outline-variant/20 rounded-xl shadow-xl overflow-hidden z-50 min-w-[220px]">
-      ${MODELS.map(m => `<div onclick="window._selectModel('${m.id}')" class="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-container transition-colors ${state.currentModel === m.id ? 'bg-surface-container-low' : ''}">
+      ${getModels().map(m => `<div onclick="window._selectModel('${m.id}')" class="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-surface-container transition-colors ${state.currentModel === m.id ? 'bg-surface-container-low' : ''}">
         <span class="material-symbols-outlined text-primary" style="font-size:16px">${m.icon}</span>
         <div class="flex-1 min-w-0">
           <div class="text-xs font-bold text-on-surface" style="font-family:Manrope">${m.label}</div>
@@ -2266,8 +2312,12 @@ function render() {
             <span class="material-symbols-outlined text-sm">filter_vintage</span>
           </div>
           <div class="sidebar-header-title">
-            <h2 class="text-lg font-bold text-[#506A58] font-headline tracking-tight">Sessions</h2>
-            <p class="text-[10px] uppercase tracking-widest text-[#506A58]/60">Management</p>
+            <h2 class="text-lg font-bold text-[#506A58] font-headline tracking-tight">Biome</h2>
+            <p class="text-[10px] uppercase tracking-widest text-[#506A58]/60 flex items-center gap-1">
+              <span style="font-variant-numeric:tabular-nums">${BIOME.codename}</span>
+              <span class="opacity-40">·</span>
+              <span>v${BIOME.major}.${BIOME.minor}</span>
+            </p>
           </div>
         </div>
         <button class="p-2 -mr-2 hover:bg-[#fbfdfc]/60 dark:hover:bg-[#2c3630] rounded-lg text-on-surface-variant transition-colors flex items-center justify-center shrink-0" onclick="window._toggleSidebar()" title="Toggle Sidebar">

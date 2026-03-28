@@ -257,33 +257,52 @@ class SetupWizard {
   }
 
   _step3Cloud() {
+    const PROVIDERS = [
+      { id: 'gemini',    label: 'Google Gemini',  color: '#4285F4', icon: 'auto_awesome',   prefix: 'AIza',    hint: 'aistudio.google.com/apikey',        url: 'https://aistudio.google.com/apikey',        placeholder: 'AIzaSy…',   note: 'Free tier available' },
+      { id: 'anthropic', label: 'Anthropic Claude', color: '#D97757', icon: 'psychology',    prefix: 'sk-ant-', hint: 'console.anthropic.com/settings/keys', url: 'https://console.anthropic.com/settings/keys', placeholder: 'sk-ant-…',  note: 'Claude 3.5 Sonnet, Haiku' },
+      { id: 'openai',    label: 'OpenAI',          color: '#10A37F', icon: 'smart_toy',      prefix: 'sk-',     hint: 'platform.openai.com/api-keys',       url: 'https://platform.openai.com/api-keys',        placeholder: 'sk-…',      note: 'GPT-4o, o1' },
+      { id: 'grok',      label: 'xAI / Grok',      color: '#1A1A1A', icon: 'bolt',          prefix: 'xai-',    hint: 'console.x.ai',                       url: 'https://console.x.ai',                        placeholder: 'xai-…',     note: 'Grok-2' },
+      { id: 'mistral',   label: 'Mistral AI',       color: '#FA520F', icon: 'flare',         prefix: '',        hint: 'console.mistral.ai/api-keys',        url: 'https://console.mistral.ai/api-keys',         placeholder: 'mistral key…', note: 'Mistral Large, Nemo' },
+      { id: 'perplexity',label: 'Perplexity',       color: '#20B2AA', icon: 'travel_explore', prefix: 'pplx-',  hint: 'perplexity.ai/settings/api',         url: 'https://www.perplexity.ai/settings/api',      placeholder: 'pplx-…',   note: 'Real-time web search' },
+    ];
+
     return `
       ${this._backBtn()}
-      <h2 class="font-headline text-2xl font-extrabold tracking-tight mb-1" style="color:#293533">Add your API key</h2>
-      <p class="text-sm mb-6" style="color:#55625f">Stored only on this device — never sent anywhere else.</p>
-      <div class="space-y-4">
-        <div>
-          <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">Provider</label>
-          <select id="wz-provider" class="w-full px-4 py-3 rounded-xl border text-sm outline-none transition-all" style="background:#eff5f2;border-color:#a8b5b2;color:#293533">
-            <option value="gemini">Google Gemini</option>
-            <option value="openai">OpenAI</option>
-          </select>
-        </div>
-        <div>
-          <label class="text-xs font-semibold uppercase tracking-wide block mb-1.5" style="color:#55625f">API Key</label>
-          <input id="wz-apikey" type="password" placeholder="Paste your key here"
-            class="w-full px-4 py-3.5 rounded-xl border text-sm outline-none transition-all font-mono"
-            style="background:#eff5f2;border-color:#a8b5b2;color:#293533"
-            autocomplete="off" autocorrect="off" spellcheck="false" />
-          <p id="wz-apikey-hint" class="text-xs mt-1.5" style="color:#717d7b">
-            Get a free key at <a href="#" class="underline underline-offset-2" style="color:#4a6453" onclick="return false">aistudio.google.com</a>
-          </p>
-        </div>
-        <p id="wz-apikey-err" class="text-xs hidden" style="color:#9f403d">Please enter your API key</p>
-        <button id="wz-cloud-continue" class="w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] hover:opacity-90" style="background:#4a6453;color:#e2ffe8">
-          Continue <span class="material-symbols-outlined text-base" style="font-variation-settings:'FILL' 1">arrow_forward</span>
-        </button>
-      </div>`;
+      <h2 class="font-headline text-2xl font-extrabold tracking-tight mb-1" style="color:#293533">Connect your AI providers</h2>
+      <p class="text-sm mb-5" style="color:#55625f">Add one or more keys — the more you add, the more models you unlock. Stored only on this device.</p>
+      <div class="space-y-2 mb-4" id="wz-providers-list">
+        ${PROVIDERS.map(p => `
+          <div class="wz-provider-row rounded-xl border transition-all overflow-hidden" style="background:#eff5f2;border-color:#a8b5b2" data-id="${p.id}">
+            <button type="button" class="wz-provider-toggle w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-container transition-colors" data-id="${p.id}">
+              <div class="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style="background:${p.color}18;border:1px solid ${p.color}30">
+                <span class="material-symbols-outlined" style="font-size:15px;color:${p.color}">${p.icon}</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-semibold flex items-center gap-2" style="color:#293533">
+                  ${p.label}
+                  <span class="text-[9px] font-normal px-1.5 py-0.5 rounded-full" style="background:#e8f0ed;color:#717d7b">${p.note}</span>
+                </div>
+              </div>
+              <span class="wz-provider-status text-[10px] font-semibold px-2 py-0.5 rounded-full" id="wz-status-${p.id}" style="background:#e8f0ed;color:#a8b5b2">not set</span>
+              <span class="material-symbols-outlined text-base wz-chevron" style="color:#a8b5b2;transition:transform .2s">expand_more</span>
+            </button>
+            <div class="wz-provider-body hidden px-4 pb-4" id="wz-body-${p.id}">
+              <div class="flex gap-2 mb-1.5">
+                <input type="password" id="wz-key-${p.id}"
+                  class="flex-1 px-3 py-2.5 rounded-lg border text-xs outline-none transition-all font-mono"
+                  style="background:#fff;border-color:#c8dfd2;color:#293533"
+                  placeholder="${p.placeholder}" autocomplete="off" spellcheck="false"/>
+                <button type="button" class="wz-verify-btn px-3 py-2 rounded-lg text-xs font-semibold transition-all hover:opacity-80 active:scale-95" data-id="${p.id}" style="background:#4a6453;color:#e2ffe8;white-space:nowrap">Verify</button>
+              </div>
+              <p class="text-[10px]" style="color:#717d7b">Get a key at <a href="#" class="underline" style="color:#4a6453" id="wz-link-${p.id}" data-url="${p.url}">${p.hint}</a></p>
+              <p id="wz-err-${p.id}" class="text-[10px] mt-1 hidden" style="color:#9f403d"></p>
+            </div>
+          </div>`).join('')}
+      </div>
+      <p id="wz-cloud-err" class="text-xs mb-3 hidden" style="color:#9f403d">Please add at least one API key to continue.</p>
+      <button id="wz-cloud-continue" class="w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] hover:opacity-90" style="background:#4a6453;color:#e2ffe8">
+        Continue <span class="material-symbols-outlined text-base" style="font-variation-settings:'FILL' 1">arrow_forward</span>
+      </button>`;
   }
 
   _step3Local() {
@@ -343,73 +362,97 @@ class SetupWizard {
     const { modelType } = this.choices;
 
     if (modelType === 'cloud') {
-      const providerEl = document.getElementById('wz-provider');
-      const hintEl     = document.getElementById('wz-apikey-hint');
-      const errEl      = document.getElementById('wz-apikey-err');
-      const input      = document.getElementById('wz-apikey');
-      const btn        = document.getElementById('wz-cloud-continue');
-      setTimeout(() => input.focus(), 350);
-
       const openLink = (url) => {
         if (window.webkit?.messageHandlers?.biomeInstall) {
           window.webkit.messageHandlers.biomeInstall.postMessage({ action: 'open_url', url });
-        } else {
-          window.open(url, '_blank');
-        }
+        } else { window.open(url, '_blank'); }
       };
 
-      const updateHint = () => {
-        hintEl.innerHTML = providerEl.value === 'gemini'
-          ? `Get a free key at <a href="#" class="underline underline-offset-2" style="color:#4a6453" id="wz-key-link">aistudio.google.com</a>`
-          : `Get a key at <a href="#" class="underline underline-offset-2" style="color:#4a6453" id="wz-key-link">platform.openai.com</a>`;
-        document.getElementById('wz-key-link')?.addEventListener('click', (e) => {
-          e.preventDefault();
-          openLink(providerEl.value === 'gemini' ? 'https://aistudio.google.com/apikey' : 'https://platform.openai.com/api-keys');
-        });
-      };
-      updateHint();
-      providerEl.addEventListener('change', updateHint);
-
-      const showErr = (msg) => { errEl.textContent = msg; errEl.classList.remove('hidden'); };
-      input.addEventListener('input', () => errEl.classList.add('hidden'));
-
-      btn.addEventListener('click', async () => {
-        const key = input.value.trim();
-        const provider = providerEl.value;
-
-        if (!key) { showErr('Please enter your API key'); return; }
-
-        // Format check
-        if (provider === 'gemini' && !key.startsWith('AIza')) {
-          showErr('Gemini keys start with "AIza" — check you copied the full key'); return;
-        }
-        if (provider === 'openai' && !key.startsWith('sk-')) {
-          showErr('OpenAI keys start with "sk-" — check you copied the full key'); return;
-        }
-
-        // Live validation
-        btn.disabled = true;
-        btn.innerHTML = 'Verifying key…';
-        try {
-          let valid = false;
-          if (provider === 'gemini') {
-            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, { signal: AbortSignal.timeout(6000) });
-            valid = r.ok;
-            if (!valid) { const d = await r.json().catch(() => ({})); showErr(d?.error?.message || 'Invalid Gemini API key — check it and try again'); }
-          } else {
-            const r = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(6000) });
-            valid = r.ok;
-            if (!valid) { const d = await r.json().catch(() => ({})); showErr(d?.error?.message || 'Invalid OpenAI API key — check it and try again'); }
+      // Provider accordion toggle
+      document.querySelectorAll('.wz-provider-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.id;
+          const body = document.getElementById(`wz-body-${id}`);
+          const chevron = btn.querySelector('.wz-chevron');
+          const isOpen = !body.classList.contains('hidden');
+          // Close all others
+          document.querySelectorAll('.wz-provider-body').forEach(b => b.classList.add('hidden'));
+          document.querySelectorAll('.wz-chevron').forEach(c => c.style.transform = '');
+          if (!isOpen) {
+            body.classList.remove('hidden');
+            chevron.style.transform = 'rotate(180deg)';
+            setTimeout(() => document.getElementById(`wz-key-${id}`)?.focus(), 50);
           }
-          if (!valid) { btn.disabled = false; btn.innerHTML = 'Continue <span class="material-symbols-outlined text-base" style="font-variation-settings:\'FILL\' 1">arrow_forward</span>'; return; }
-        } catch {
-          // Network error — let them proceed (offline scenario)
-        }
+        });
+      });
 
-        this.choices.provider = provider;
-        this.choices.apiKey   = key;
-        localStorage.setItem('biome-provider', provider);
-        localStorage.setItem('biome-api-key', key);
+      // External key links
+      document.querySelectorAll('[id^="wz-link-"]').forEach(a => {
+        a.addEventListener('click', (e) => { e.preventDefault(); openLink(a.dataset.url); });
+      });
+
+      // Verify buttons
+      document.querySelectorAll('.wz-verify-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          const input = document.getElementById(`wz-key-${id}`);
+          const statusEl = document.getElementById(`wz-status-${id}`);
+          const errEl = document.getElementById(`wz-err-${id}`);
+          const key = input?.value?.trim();
+          if (!key) { errEl.textContent = 'Please paste your key first'; errEl.classList.remove('hidden'); return; }
+          errEl.classList.add('hidden');
+          btn.textContent = '…';
+          btn.disabled = true;
+
+          let valid = false;
+          try {
+            if (id === 'gemini') {
+              if (!key.startsWith('AIza')) { errEl.textContent = 'Gemini keys start with "AIza"'; errEl.classList.remove('hidden'); btn.textContent = 'Verify'; btn.disabled = false; return; }
+              const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`, { signal: AbortSignal.timeout(7000) });
+              valid = r.ok;
+              if (!valid) { const d = await r.json().catch(() => ({})); errEl.textContent = d?.error?.message || 'Invalid key'; errEl.classList.remove('hidden'); }
+            } else if (id === 'openai') {
+              if (!key.startsWith('sk-')) { errEl.textContent = 'OpenAI keys start with "sk-"'; errEl.classList.remove('hidden'); btn.textContent = 'Verify'; btn.disabled = false; return; }
+              const r = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(7000) });
+              valid = r.ok;
+              if (!valid) { const d = await r.json().catch(() => ({})); errEl.textContent = d?.error?.message || 'Invalid key'; errEl.classList.remove('hidden'); }
+            } else if (id === 'anthropic') {
+              if (!key.startsWith('sk-ant-')) { errEl.textContent = 'Anthropic keys start with "sk-ant-"'; errEl.classList.remove('hidden'); btn.textContent = 'Verify'; btn.disabled = false; return; }
+              // Anthropic doesn't have a free validation endpoint — just check prefix and save
+              valid = true;
+            } else {
+              // grok, mistral, perplexity — trust the key, no public validation endpoint
+              valid = key.length > 10;
+              if (!valid) { errEl.textContent = 'Key looks too short'; errEl.classList.remove('hidden'); }
+            }
+          } catch {
+            valid = true; // offline — trust the key
+          }
+
+          btn.textContent = 'Verify';
+          btn.disabled = false;
+
+          if (valid) {
+            localStorage.setItem(`biome-key-${id}`, key);
+            // Also set biome-provider / biome-api-key to first saved key for backward compat
+            if (!localStorage.getItem('biome-api-key')) {
+              localStorage.setItem('biome-provider', id);
+              localStorage.setItem('biome-api-key', key);
+            }
+            statusEl.textContent = '✓ set';
+            statusEl.style.background = '#dcfce7';
+            statusEl.style.color = '#16a34a';
+            // Close accordion
+            document.getElementById(`wz-body-${id}`)?.classList.add('hidden');
+            document.querySelectorAll('.wz-chevron').forEach(c => c.style.transform = '');
+          }
+        });
+      });
+
+      // Continue button
+      document.getElementById('wz-cloud-continue').addEventListener('click', () => {
+        const hasKey = ['gemini','anthropic','openai','grok','mistral','perplexity'].some(id => localStorage.getItem(`biome-key-${id}`));
+        if (!hasKey) { document.getElementById('wz-cloud-err').classList.remove('hidden'); return; }
         this._show(4);
       });
     }
