@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Nordic Studio — Feature Mockups</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Manrope:wght@600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        primary: '#4a6453', 'primary-container': '#cdead3', 'on-primary': '#e2ffe8',
+        'on-primary-container': '#3e5746', secondary: '#516357', surface: '#f7faf8',
+        'surface-container-low': '#eff5f2', 'surface-container': '#e8f0ed',
+        'surface-container-high': '#e0eae7', 'surface-container-lowest': '#fbfdfc',
+        'on-surface': '#293533', 'on-surface-variant': '#55625f',
+        'outline-variant': '#a8b5b2', outline: '#717d7b',
+      },
+      fontFamily: { headline: ['Manrope'], body: ['Inter'], 'serif-elegant': ['Playfair Display','serif'] }
+    }
+  }
+}
+</script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Inter, sans-serif; background: #0f1614; color: #293533; }
+  .ms { font-family: 'Material Symbols Outlined'; font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; line-height:1; }
+  .ms-fill { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
+  .glass { background: rgba(251,253,252,0.88); backdrop-filter: blur(20px); }
+  .dot-grid { background-image: radial-gradient(#d8e5e2 1px, transparent 1px); background-size: 28px 28px; }
+
+  /* Nav */
+  #nav { position:fixed; top:0; left:0; right:0; z-index:100; background:#0f1614; border-bottom:1px solid #1e2a24; padding:0 32px; height:56px; display:flex; align-items:center; gap:8px; overflow-x:auto; }
+  .nav-btn { padding:6px 16px; border-radius:20px; border:1px solid #2a3a30; background:transparent; color:#7a9a86; font-size:12px; font-family:Manrope; font-weight:700; cursor:pointer; white-space:nowrap; transition:all .15s; }
+  .nav-btn.active { background:#4a6453; color:#e2ffe8; border-color:#4a6453; }
+  .nav-btn:hover:not(.active) { background:#1a2a20; color:#adc9b6; }
+
+  /* Screen wrapper */
+  .screen { display:none; padding-top:80px; padding-bottom:40px; min-height:100vh; }
+  .screen.active { display:block; }
+
+  /* Section label */
+  .section-label { font-family:Manrope; font-weight:800; font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:#4a8; margin-bottom:8px; }
+  .why-box { background:#0a1f12; border:1px solid #1e3a28; border-radius:12px; padding:16px 20px; margin-bottom:24px; color:#7ab890; font-size:13px; line-height:1.6; }
+  .why-box strong { color:#aee0be; }
+
+  /* App frame */
+  .app-frame { border-radius:16px; overflow:hidden; box-shadow:0 40px 80px rgba(0,0,0,.6); background:#f7faf8; max-width:1100px; margin:0 auto; }
+  .frame-bar { background:#e8f0ed; padding:10px 16px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #d8e5e2; }
+  .frame-dot { width:12px; height:12px; border-radius:50%; }
+
+  /* Sidebar */
+  .sidebar { width:240px; background:#eff5f2; border-right:1px solid #e0eae7; display:flex; flex-direction:column; height:600px; flex-shrink:0; }
+  .sidebar-header { padding:16px; border-bottom:1px solid #e0eae7; }
+  .main-area { flex:1; display:flex; flex-direction:column; height:600px; overflow:hidden; }
+
+  /* Workspace pill */
+  .ws-pill { display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:8px; cursor:pointer; transition:background .1s; font-size:11px; font-weight:600; color:#516357; }
+  .ws-pill:hover { background:#e0eae7; }
+  .ws-pill.active { background:#cdead3; color:#3e5746; }
+
+  /* Convo item */
+  .convo-item { padding:8px 12px; margin:1px 8px; border-radius:8px; cursor:pointer; transition:background .1s; }
+  .convo-item:hover { background:#e8f0ed; }
+  .convo-item.active { background:#e8f0ed; }
+  .convo-title { font-size:12px; font-weight:600; color:#293533; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .convo-meta { font-size:10px; color:#717d7b; margin-top:1px; }
+
+  /* Model badge */
+  .model-badge { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:20px; background:#e8f0ed; border:1px solid #d8e5e2; font-size:11px; font-weight:700; color:#516357; cursor:pointer; transition:all .15s; font-family:Manrope; }
+  .model-badge:hover { background:#cdead3; border-color:#bfdcc5; color:#3e5746; }
+
+  /* Canvas split */
+  .canvas-panel { width:380px; background:#fbfdfc; border-left:1px solid #e0eae7; display:flex; flex-direction:column; flex-shrink:0; }
+  .canvas-header { padding:10px 14px; border-bottom:1px solid #e8f0ed; display:flex; align-items:center; gap:8px; background:#f7faf8; }
+
+  /* Mindmap workflow nodes */
+  .wf-node { padding:10px 14px; border-radius:12px; background:white; border:1.5px solid #d8e5e2; box-shadow:0 2px 8px rgba(0,0,0,.06); cursor:pointer; transition:all .15s; min-width:120px; text-align:center; position:relative; }
+  .wf-node:hover { border-color:#4a6453; box-shadow:0 4px 16px rgba(74,100,83,.15); transform:translateY(-2px); }
+  .wf-node.active { border-color:#4a6453; background:#f0fdf4; }
+  .wf-arrow { display:flex; align-items:center; color:#a8b5b2; }
+  .wf-arrow .ms { font-size:20px; }
+
+  /* Palette */
+  .palette-overlay { background:rgba(15,22,20,.7); backdrop-filter:blur(4px); position:absolute; inset:0; display:flex; align-items:flex-start; justify-content:center; padding-top:100px; z-index:50; }
+  .palette-box { background:#fbfdfc; border-radius:16px; box-shadow:0 40px 80px rgba(0,0,0,.3); width:520px; overflow:hidden; border:1px solid #e0eae7; }
+  .palette-input { padding:14px 18px; font-size:15px; font-family:Inter; border:none; outline:none; background:transparent; width:100%; color:#293533; border-bottom:1px solid #e8f0ed; }
+  .palette-item { padding:10px 18px; display:flex; align-items:center; gap:12px; cursor:pointer; transition:background .1s; }
+  .palette-item:hover, .palette-item.sel { background:#eff5f2; }
+  .palette-kbd { padding:2px 6px; border-radius:5px; background:#e8f0ed; font-size:10px; font-weight:600; font-family:Manrope; color:#516357; border:1px solid #d8e5e2; margin-left:auto; }
+
+  /* Arena */
+  .arena-col { flex:1; border-right:1px solid #e0eae7; display:flex; flex-direction:column; }
+  .arena-col:last-child { border-right:none; }
+  .arena-header { padding:10px 14px; border-bottom:1px solid #e8f0ed; display:flex; align-items:center; gap:8px; background:#f7faf8; }
+
+  /* Toast */
+  .toast { position:absolute; bottom:16px; left:50%; transform:translateX(-50%); background:#293533; color:#e2ffe8; padding:8px 18px; border-radius:20px; font-size:12px; font-weight:600; font-family:Manrope; letter-spacing:.05em; white-space:nowrap; box-shadow:0 8px 32px rgba(0,0,0,.3); }
+
+  /* Chip */
+  .chip { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:20px; background:#e8f0ed; font-size:10px; font-weight:700; color:#516357; font-family:Manrope; }
+
+  /* Annotations */
+  .callout { position:absolute; background:#fef9c3; border:1px solid #fde047; border-radius:8px; padding:6px 10px; font-size:11px; font-weight:600; color:#713f12; max-width:160px; line-height:1.4; z-index:30; box-shadow:0 4px 12px rgba(0,0,0,.12); }
+  .callout::before { content:''; position:absolute; width:8px; height:8px; background:#fef9c3; border-left:1px solid #fde047; border-bottom:1px solid #fde047; }
+
+  /* Animate pulse dot */
+  @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .pulse { animation:pulse-dot 1.5s infinite; }
+</style>
+</head>
+<body>
+
+<!-- Top nav -->
+<div id="nav">
+  <span style="color:#4a8;font-family:Manrope;font-weight:800;font-size:13px;margin-right:12px;white-space:nowrap">Nordic Studio · Mockups</span>
+  <button class="nav-btn active" onclick="show('history')">① Conversation History</button>
+  <button class="nav-btn" onclick="show('canvas')">② Canvas / Artifacts</button>
+  <button class="nav-btn" onclick="show('model')">③ Model Switcher</button>
+  <button class="nav-btn" onclick="show('palette')">④ Command Palette</button>
+  <button class="nav-btn" onclick="show('workflow')">⑤ Mindmap Workflows</button>
+  <button class="nav-btn" onclick="show('arena')">⑥ Multi-Model Arena</button>
+  <button class="nav-btn" onclick="show('attach')">⑦ File Attachment</button>
+</div>
+
+<!-- ①  CONVERSATION HISTORY ─────────────────────────────────────────────── -->
+<div class="screen active" id="screen-history" style="padding:80px 32px 40px">
+  <div class="why-box" style="max-width:1100px;margin:0 auto 20px">
+    <strong>Why this matters:</strong> Right now every session disappears. Users can't build on previous work, reference past answers, or develop context over time.
+    Every other AI tool in this space (ChatGPT, Claude, Notion AI) retains history. Without it, Nordic Studio feels like a scratch pad — not a workspace.
+    <br><br>
+    <strong>What's new here vs. competitors:</strong> Conversations are grouped into <strong>Workspaces</strong> (like "Q2 Launch", "Research").
+    Each workspace carries its own tools, sources, and system prompt. You get project-scoped AI — something even ChatGPT's "Projects" doesn't do well.
+  </div>
+  <div class="app-frame">
+    <div class="frame-bar">
+      <div class="frame-dot" style="background:#ff5f57"></div>
+      <div class="frame-dot" style="background:#febc2e"></div>
+      <div class="frame-dot" style="background:#28c840"></div>
+      <span style="font-size:11px;color:#717d7b;margin-left:8px;font-family:Manrope;font-weight:700">NordicStudio</span>
+    </div>
+    <div style="display:flex">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <button style="width:100%;padding:8px 12px;background:#4a6453;color:#e2ffe8;border:none;border-radius:8px;font-family:Manrope;font-weight:700;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+            <span class="ms" style="font-size:16px">add</span> New Chat
+          </button>
+        </div>
+
+        <!-- Workspace switcher -->
+        <div style="padding:10px 12px 6px;border-bottom:1px solid #e0eae7">
+          <div style="font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#a8b5b2;margin-bottom:6px;font-family:Manrope">Workspace</div>
+          <div class="ws-pill active">
+            <span class="ms" style="font-size:14px;color:#4a6453">folder_open</span>
+            Q2 Launch
+            <span class="ms" style="font-size:12px;margin-left:auto;color:#a8b5b2">expand_more</span>
+          </div>
+        </div>
+
+        <!-- Recent -->
+        <div style="flex:1;overflow-y:auto;padding:8px 0">
+          <div style="padding:6px 12px;font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#a8b5b2;font-family:Manrope">Recent</div>
+          <div class="convo-item active">
+            <div class="convo-title">Competitor analysis draft</div>
+            <div class="convo-meta">Today · Gemini Flash</div>
+          </div>
+          <div class="convo-item">
+            <div class="convo-title">Synthesize Q1 reports</div>
+            <div class="convo-meta">Yesterday · Gemini Flash</div>
+          </div>
+          <div class="convo-item">
+            <div class="convo-title">Landing page copy v2</div>
+            <div class="convo-meta">Mon · Gemini Flash</div>
+          </div>
+          <div style="padding:10px 12px 4px;font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#a8b5b2;font-family:Manrope;margin-top:4px">Research</div>
+          <div class="convo-item">
+            <div class="convo-title">AI desktop apps market</div>
+            <div class="convo-meta">Sat · Gemini Flash</div>
+          </div>
+          <div class="convo-item">
+            <div class="convo-title">Nordic competitor matrix</div>
+            <div class="convo-meta">Fri · Gemini Flash</div>
+          </div>
+        </div>
+
+        <div style="padding:12px;border-top:1px solid #e0eae7;display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;color:#516357;font-size:12px;font-weight:500">
+            <span class="ms" style="font-size:16px">settings</span> Settings
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#22c55e"></div>
+            <span style="font-size:12px;font-weight:500;color:#516357">Connected</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main chat -->
+      <div class="main-area" style="background:#f7faf8">
+        <div style="padding:12px 20px;border-bottom:1px solid #e8f0ed;display:flex;align-items:center;justify-content:center;gap:40px;background:#eff5f2">
+          <a style="font-family:Manrope;font-weight:700;font-size:15px;color:#4a6453;border-bottom:2px solid #4a6453;padding-bottom:4px;text-decoration:none">Chat</a>
+          <a style="font-family:Manrope;font-weight:700;font-size:15px;color:#a8b5b2;text-decoration:none">Mindmap</a>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;flex-direction:column;gap:8px;max-width:560px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="width:20px;height:20px;border-radius:50%;background:#e8f0ed;border:1px solid #d8e5e2;display:flex;align-items:center;justify-content:center">
+                <span class="ms" style="font-size:12px;color:#4a6453">psychology</span>
+              </div>
+              <span style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#4a6453;font-family:Manrope">Taiga</span>
+            </div>
+            <div style="background:#fbfdfc;border:1px solid #e0eae7;border-radius:12px;border-top-left-radius:3px;padding:12px 16px;font-size:13px;line-height:1.6;color:#293533">
+              Here's a draft of the competitor analysis based on the sources you attached to this workspace. I've focused on the three main gaps you flagged last session.
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto;max-width:480px">
+            <span style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#a8b5b2;font-family:Manrope">You</span>
+            <div style="background:#4a6453;color:#e2ffe8;border-radius:12px;border-top-right-radius:3px;padding:10px 14px;font-size:13px;line-height:1.6">
+              Can you also pull in what we found about pricing in the Research workspace?
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;max-width:560px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="width:20px;height:20px;border-radius:50%;background:#e8f0ed;border:1px solid #d8e5e2;display:flex;align-items:center;justify-content:center">
+                <span class="ms" style="font-size:12px;color:#4a6453">psychology</span>
+              </div>
+              <span style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#4a6453;font-family:Manrope">Taiga</span>
+            </div>
+            <div style="background:#fbfdfc;border:1px solid #e0eae7;border-radius:12px;border-top-left-radius:3px;padding:12px 16px;font-size:13px;line-height:1.6;color:#293533">
+              Cross-referencing the Research workspace now…
+              <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:#e8f0ed;border-radius:12px;font-size:10px;font-weight:700;color:#516357;margin-left:6px;font-family:Manrope">
+                <span class="ms pulse" style="font-size:10px;color:#4a6453">hub</span> Research workspace
+              </span>
+            </div>
+          </div>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid #e8f0ed;background:#f7faf8">
+          <div style="background:#fbfdfc;border:1px solid #e0eae7;border-radius:12px;display:flex;align-items:center;gap:8px;padding:8px 12px">
+            <input style="flex:1;border:none;outline:none;background:transparent;font-size:13px;color:#293533;font-family:Inter" placeholder="Message Taiga…" value=""/>
+            <div style="width:32px;height:32px;background:#4a6453;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+              <span class="ms ms-fill" style="font-size:16px;color:#e2ffe8">send</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ② CANVAS / ARTIFACTS ─────────────────────────────────────────────────── -->
+<div class="screen" id="screen-canvas" style="padding:80px 32px 40px">
+  <div class="why-box" style="max-width:1100px;margin:0 auto 20px">
+    <strong>Why this matters:</strong> Right now when the AI writes code or a document, it disappears into the chat scroll. You can't edit it, and it gets buried.
+    A persistent artifact panel means AI-generated output becomes something you <em>work on</em>, not something you copy-paste away.
+    <br><br>
+    <strong>What's practical here:</strong> This isn't a gimmick — it replaces the copy-paste workflow. Code runs in a sandboxed preview. Documents can be refined iteratively.
+    The panel opens automatically when the AI produces something structured (code blocks, tables, long-form text).
+  </div>
+  <div class="app-frame">
+    <div class="frame-bar">
+      <div class="frame-dot" style="background:#ff5f57"></div>
+      <div class="frame-dot" style="background:#febc2e"></div>
+      <div class="frame-dot" style="background:#28c840"></div>
+      <span style="font-size:11px;color:#717d7b;margin-left:8px;font-family:Manrope;font-weight:700">NordicStudio</span>
+    </div>
+    <div style="display:flex">
+      <div class="sidebar" style="width:200px">
+        <div style="padding:12px">
+          <button style="width:100%;padding:7px;background:#4a6453;color:#e2ffe8;border:none;border-radius:8px;font-family:Manrope;font-weight:700;font-size:11px;cursor:pointer">+ New Chat</button>
+        </div>
+        <div style="padding:6px 0;flex:1">
+          <div class="convo-item active"><div class="convo-title">Write a pricing page</div><div class="convo-meta">Now</div></div>
+          <div class="convo-item"><div class="convo-title">Q2 competitor analysis</div><div class="convo-meta">Yesterday</div></div>
+        </div>
+      </div>
+
+      <!-- Chat side -->
+      <div style="flex:1;display:flex;flex-direction:column;height:600px;border-right:1px solid #e0eae7">
+        <div style="padding:10px 16px;border-bottom:1px solid #e8f0ed;display:flex;align-items:center;justify-content:center;gap:32px;background:#eff5f2">
+          <a style="font-family:Manrope;font-weight:700;font-size:14px;color:#4a6453;border-bottom:2px solid #4a6453;padding-bottom:3px;text-decoration:none">Chat</a>
+          <a style="font-family:Manrope;font-weight:700;font-size:14px;color:#a8b5b2;text-decoration:none">Mindmap</a>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;flex-direction:column;align-items:flex-end;max-width:380px;margin-left:auto;gap:4px">
+            <span style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#a8b5b2;font-family:Manrope">You</span>
+            <div style="background:#4a6453;color:#e2ffe8;border-radius:12px;border-top-right-radius:3px;padding:9px 13px;font-size:12px;line-height:1.6">Write a complete pricing page in HTML for a SaaS tool. Three tiers.</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;max-width:400px">
+            <div style="display:flex;align-items:center;gap:5px">
+              <div style="width:18px;height:18px;border-radius:50%;background:#e8f0ed;display:flex;align-items:center;justify-content:center">
+                <span class="ms" style="font-size:11px;color:#4a6453">psychology</span>
+              </div>
+              <span style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#4a6453;font-family:Manrope">Taiga</span>
+            </div>
+            <div style="background:#fbfdfc;border:1px solid #e0eae7;border-radius:12px;border-top-left-radius:3px;padding:10px 14px;font-size:12px;line-height:1.6;color:#293533">
+              Here's your pricing page — I've opened it in the canvas so you can preview and edit it directly.
+              <div style="margin-top:8px;display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:#eff5f2;border:1px solid #d8e5e2;border-radius:8px;cursor:pointer;font-size:10px;font-weight:700;color:#4a6453;font-family:Manrope">
+                <span class="ms" style="font-size:12px">open_in_new</span> pricing.html · 142 lines
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:10px 14px;border-top:1px solid #e8f0ed">
+          <div style="background:#fbfdfc;border:1px solid #e0eae7;border-radius:10px;display:flex;align-items:center;gap:6px;padding:6px 10px">
+            <input style="flex:1;border:none;outline:none;background:transparent;font-size:12px;color:#293533;font-family:Inter" placeholder="Refine the artifact…"/>
+            <div style="width:28px;height:28px;background:#4a6453;border-radius:7px;display:flex;align-items:center;justify-content:center">
+              <span class="ms ms-fill" style="font-size:14px;color:#e2ffe8">send</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Canvas panel -->
+      <div class="canvas-panel">
+        <div class="canvas-header">
+          <span class="ms" style="font-size:16px;color:#4a6453">code</span>
+          <span style="font-size:11px;font-weight:700;color:#293533;font-family:Manrope;flex:1">pricing.html</span>
+          <div style="display:flex;gap:4px">
+            <div style="padding:3px 8px;background:#e8f0ed;border-radius:6px;font-size:10px;font-weight:700;color:#516357;cursor:pointer;font-family:Manrope">Preview</div>
+            <div style="padding:3px 8px;background:#4a6453;border-radius:6px;font-size:10px;font-weight:700;color:#e2ffe8;cursor:pointer;font-family:Manrope">Code</div>
+            <span class="ms" style="font-size:16px;color:#a8b5b2;cursor:pointer;margin-left:4px">close</span>
+          </div>
+        </div>
+        <div style="flex:1;overflow:auto;padding:14px;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.7;color:#293533;background:#fbfdfc">
+          <div style="color:#9a9e9c">&lt;!-- Pricing Page --&gt;</div>
+          <div><span style="color:#8e624c">&lt;section</span> <span style="color:#4a6453">class</span>=<span style="color:#505f76">"pricing"</span><span style="color:#8e624c">&gt;</span></div>
+          <div style="padding-left:16px"><span style="color:#8e624c">&lt;div</span> <span style="color:#4a6453">class</span>=<span style="color:#505f76">"tier starter"</span><span style="color:#8e624c">&gt;</span></div>
+          <div style="padding-left:32px"><span style="color:#8e624c">&lt;h3&gt;</span>Starter<span style="color:#8e624c">&lt;/h3&gt;</span></div>
+          <div style="padding-left:32px"><span style="color:#8e624c">&lt;p</span> <span style="color:#4a6453">class</span>=<span style="color:#505f76">"price"</span><span style="color:#8e624c">&gt;</span>$9/mo<span style="color:#8e624c">&lt;/p&gt;</span></div>
+          <div style="padding-left:32px"><span style="color:#8e624c">&lt;ul&gt;</span></div>
+          <div style="padding-left:48px;color:#9a9e9c">… feature list …</div>
+          <div style="padding-left:32px"><span style="color:#8e624c">&lt;/ul&gt;</span></div>
+          <div style="padding-left:16px"><span style="color:#8e624c">&lt;/div&gt;</span></div>
+          <div style="padding-left:16px;color:#9a9e9c">/* Pro tier */</div>
+          <div style="padding-left:16px"><span style="color:#8e624c">&lt;div</span> <span style="color:#4a6453">class</span>=<span style="color:#505f76">"tier pro featured"</span><span style="color:#8e624c">&gt;</span></div>
+          <div style="padding-left:32px">…</div>
+          <div style="padding-left:16px"><span style="color:#8e624c">&lt;/div&gt;</span></div>
+          <div><span style="color:#8e624c">&lt;/section&gt;</span></div>
+        </div>
+        <div style="padding:10px 14px;border-top:1px solid #e8f0ed;display:flex;gap:6px">
+          <button style="flex:1;padding:7px;background:#e8f0ed;border:none;border-radius:8px;font-size:11px;font-weight:700;color:#516357;cursor:pointer;font-family:Manrope">Copy</button>
+          <button style="flex:1;padding:7px;background:#4a6453;border:none;border-radius:8px;font-size:11px;font-weight:700;color:#e2ffe8;cursor:pointer;font-family:Manrope">Download</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ③ MODEL SWITCHER ─────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-model" style="padding:80px 32px 40px">
+  <div class="why-box" style="max-width:900px;margin:0 auto 20px">
+    <strong>Why this matters:</strong> You're locked into one model right now (Gemini Flash). Different tasks need different models — fast cheap models for drafts,
+    smarter ones for analysis. The ability to switch mid-session without reconfiguring anything is a real workflow accelerator.
+    <br><br>
+    <strong>What's practical:</strong> A single pill above the input. Tap it, pick the model, continue. The gateway already supports multiple models — this is mostly UI.
+  </div>
+  <div class="app-frame" style="max-width:700px">
+    <div class="frame-bar">
+      <div class="frame-dot" style="background:#ff5f57"></div>
+      <div class="frame-dot" style="background:#febc2e"></div>
+      <div class="frame-dot" style="background:#28c840"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;height:480px;background:#f7faf8">
+      <div style="padding:10px 20px;border-bottom:1px solid #e8f0ed;display:flex;align-items:center;justify-content:center;gap:32px;background:#eff5f2">
+        <a style="font-family:Manrope;font-weight:700;font-size:14px;color:#4a6453;border-bottom:2px solid #4a6453;padding-bottom:3px;text-decoration:none">Chat</a>
+        <a style="font-family:Manrope;font-weight:700;font-size:14px;color:#a8b5b2;text-decoration:none">Mindmap</a>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;max-width:380px;margin-left:auto;gap:4px">
+          <span style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#a8b5b2;font-family:Manrope">You</span>
+          <div style="background:#4a6453;color:#e2ffe8;border-radius:12px;border-top-right-radius:3px;padding:9px 13px;font-size:12px">Analyse the strategic implications of this acquisition</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;max-width:440px">
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:18px;height:18px;border-radius:50%;background:#e8f0ed;display:flex;align-items:center;justify-content:center">
+              <span class="ms" style="font-size:11px;color:#4a6453">psychology</span>
+            </div>
+            <span style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#4a6453;font-family:Manrope">Taiga</span>
+            <span class="chip" style="margin-left:2px">Gemini 2.5 Pro</span>
+          </div>
+          <div style="background:#fbfdfc;border:1px solid #e0eae7;border-radius:12px;border-top-left-radius:3px;padding:10px 14px;font-size:12px;line-height:1.6;color:#293533">
+            This acquisition signals a vertical integration play. The target's data infrastructure gives the acquirer three distinct leverage points: distribution, pricing power, and regulatory positioning…
+          </div>
+        </div>
+      </div>
+
+      <!-- Model switcher + input -->
+      <div style="border-top:1px solid #e8f0ed;background:#f7faf8">
+        <!-- Model dropdown (open state) -->
+        <div style="padding:8px 16px 0;display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;color:#a8b5b2;font-weight:600;font-family:Manrope">Model</span>
+          <div style="position:relative">
+            <div class="model-badge" style="background:#cdead3;border-color:#bfdcc5;color:#3e5746">
+              <span class="ms" style="font-size:12px;color:#4a6453">smart_toy</span>
+              Gemini 2.5 Pro
+              <span class="ms" style="font-size:11px">expand_more</span>
+            </div>
+            <!-- Dropdown -->
+            <div style="position:absolute;bottom:calc(100% + 6px);left:0;background:#fbfdfc;border:1px solid #e0eae7;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.12);min-width:220px;overflow:hidden;z-index:20">
+              <div style="padding:6px">
+                <div style="padding:8px 10px;border-radius:8px;background:#eff5f2;display:flex;align-items:center;gap:8px;cursor:pointer">
+                  <span class="ms" style="font-size:14px;color:#4a6453">smart_toy</span>
+                  <div style="flex:1">
+                    <div style="font-size:11px;font-weight:700;color:#293533;font-family:Manrope">Gemini 2.5 Pro</div>
+                    <div style="font-size:10px;color:#717d7b">Best for complex reasoning</div>
+                  </div>
+                  <span class="ms" style="font-size:14px;color:#4a6453">check</span>
+                </div>
+                <div style="padding:8px 10px;border-radius:8px;display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:2px">
+                  <span class="ms" style="font-size:14px;color:#717d7b">bolt</span>
+                  <div style="flex:1">
+                    <div style="font-size:11px;font-weight:700;color:#293533;font-family:Manrope">Gemini 2.0 Flash</div>
+                    <div style="font-size:10px;color:#717d7b">Fast, cost-efficient</div>
+                  </div>
+                </div>
+                <div style="padding:8px 10px;border-radius:8px;display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:2px">
+                  <span class="ms" style="font-size:14px;color:#717d7b">psychology_alt</span>
+                  <div style="flex:1">
+                    <div style="font-size:11px;font-weight:700;color:#293533;font-family:Manrope">GPT-4o</div>
+                    <div style="font-size:10px;color:#717d7b">OpenAI · vision ready</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:8px 16px 12px">
+          <div style="background:#fbfdfc;border:1px solid #e0eae7;border-radius:10px;display:flex;align-items:center;gap:6px;padding:7px 10px">
+            <input style="flex:1;border:none;outline:none;background:transparent;font-size:12px;color:#293533;font-family:Inter" placeholder="Message Taiga…"/>
+            <div style="width:28px;height:28px;background:#4a6453;border-radius:7px;display:flex;align-items:center;justify-content:center">
+              <span class="ms ms-fill" style="font-size:14px;color:#e2ffe8">send</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ④ COMMAND PALETTE ────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-palette" style="padding:80px 32px 40px">
+  <div class="why-box" style="max-width:900px;margin:0 auto 20px">
+    <strong>Why this matters:</strong> Power users — the people who stick with a tool long-term — rely on keyboard shortcuts.
+    Without them, every repeated action (new chat, switch workspace, change model) requires reaching for the mouse. A command palette makes the whole app
+    faster to navigate than any competitor.
+    <br><br>
+    <strong>What's practical:</strong> <strong>⌘K</strong> opens it. Type to filter any action, session, workspace, or tool.
+    This also replaces the need for a complex settings screen — just search "dark mode" and toggle it.
+  </div>
+  <div class="app-frame" style="max-width:700px;position:relative">
+    <div class="frame-bar">
+      <div class="frame-dot" style="background:#ff5f57"></div>
+      <div class="frame-dot" style="background:#febc2e"></div>
+      <div class="frame-dot" style="background:#28c840"></div>
+    </div>
+    <!-- Blurred background app -->
+    <div style="height:400px;background:#eff5f2;filter:blur(2px);opacity:.5;display:flex;align-items:center;justify-content:center">
+      <span style="font-family:Playfair Display,serif;font-size:32px;color:#293533;opacity:.3">Good afternoon.</span>
+    </div>
+    <!-- Palette overlay -->
+    <div class="palette-overlay" style="position:absolute;top:0;left:0;right:0;bottom:0;border-radius:0 0 16px 16px">
+      <div class="palette-box" style="margin-top:40px">
+        <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #e8f0ed">
+          <span class="ms" style="font-size:18px;color:#a8b5b2;margin-right:8px">search</span>
+          <input class="palette-input" style="padding:0;border:none" placeholder="Search commands, chats, workspaces…" value="new "/>
+        </div>
+        <div style="padding:6px">
+          <div style="padding:4px 12px;font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#a8b5b2;font-family:Manrope;margin-top:4px">Actions</div>
+          <div class="palette-item sel" style="border-radius:8px">
+            <span class="ms" style="font-size:16px;color:#4a6453">add_comment</span>
+            <span style="font-size:12px;font-weight:600;color:#293533;font-family:Manrope;flex:1">New Chat</span>
+            <span class="palette-kbd">⌘N</span>
+          </div>
+          <div class="palette-item" style="border-radius:8px">
+            <span class="ms" style="font-size:16px;color:#516357">create_new_folder</span>
+            <span style="font-size:12px;font-weight:600;color:#293533;font-family:Manrope;flex:1">New Workspace</span>
+            <span class="palette-kbd">⌘⇧N</span>
+          </div>
+          <div style="padding:4px 12px;font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#a8b5b2;font-family:Manrope;margin-top:6px">Recent Chats</div>
+          <div class="palette-item" style="border-radius:8px">
+            <span class="ms" style="font-size:16px;color:#a8b5b2">chat_bubble</span>
+            <div style="flex:1">
+              <div style="font-size:12px;font-weight:600;color:#293533;font-family:Manrope">Competitor analysis draft</div>
+              <div style="font-size:10px;color:#717d7b">Q2 Launch · Today</div>
+            </div>
+          </div>
+          <div class="palette-item" style="border-radius:8px">
+            <span class="ms" style="font-size:16px;color:#a8b5b2">chat_bubble</span>
+            <div style="flex:1">
+              <div style="font-size:12px;font-weight:600;color:#293533;font-family:Manrope">New feature ideas — newsletter</div>
+              <div style="font-size:10px;color:#717d7b">Q2 Launch · Yesterday</div>
+            </div>
+          </div>
+          <div style="padding:4px 12px;font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#a8b5b2;font-family:Manrope;margin-top:6px">Settings</div>
+          <div class="palette-item" style="border-radius:8px">
+            <span class="ms" style="font-size:16px;color:#a8b5b2">dark_mode</span>
+            <span style="font-size:12px;font-weight:600;color:#293533;font-family:Manrope;flex:1">Toggle dark mode</span>
+          </div>
+        </div>
+        <div style="padding:8px 16px;border-top:1px solid #e8f0ed;display:flex;gap:12px">
+          <span style="font-size:10px;color:#a8b5b2;font-family:Manrope;display:flex;align-items:center;gap:4px"><span class="palette-kbd">↵</span> Select</span>
+          <span style="font-size:10px;color:#a8b5b2;font-family:Manrope;display:flex;align-items:center;gap:4px"><span class="palette-kbd">↑↓</span> Navigate</span>
+          <span style="font-size:10px;color:#a8b5b2;font-family:Manrope;display:flex;align-items:center;gap:4px"><span class="palette-kbd">Esc</span> Close</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑤ MINDMAP WORKFLOWS ───────────────────────────────────────────────────── -->
+<div class="screen" id="screen-workflow" style="padding:80px 32px 40px">
+  <div class="why-box" style="max-width:1100px;margin:0 auto 20px">
+    <strong>Why this matters:</strong> The mindmap currently <em>shows</em> what skills exist. This makes it <em>do</em> something.
+    You visually wire skills together into a chain: "Search web → Summarise → Send to Slack."
+    <br><br>
+    <strong>Why nobody else has this:</strong> Every AI automation tool (Zapier, Make, n8n) requires you to leave the chat context entirely and go build in a separate editor.
+    Nordic Studio lets you build automation flows in the same place you use them. A saved chain is a one-click "Recipe" that runs in any conversation.
+  </div>
+  <div class="app-frame">
+    <div class="frame-bar">
+      <div class="frame-dot" style="background:#ff5f57"></div>
+      <div class="frame-dot" style="background:#febc2e"></div>
+      <div class="frame-dot" style="background:#28c840"></div>
+    </div>
+    <div style="height:560px;display:flex;flex-direction:column;background:#f7faf8">
+      <div style="padding:10px 20px;border-bottom:1px solid #e8f0ed;display:flex;align-items:center;justify-content:space-between;background:#eff5f2">
+        <div style="display:flex;align-items:center;gap:32px;position:absolute;left:50%;transform:translateX(-50%)">
+          <a style="font-family:Manrope;font-weight:700;font-size:14px;color:#a8b5b2;text-decoration:none">Chat</a>
+          <a style="font-family:Manrope;font-weight:700;font-size:14px;color:#4a6453;border-bottom:2px solid #4a6453;padding-bottom:3px;text-decoration:none">Mindmap</a>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+          <div style="padding:5px 12px;background:#cdead3;border:1px solid #bfdcc5;border-radius:8px;font-size:11px;font-weight:700;color:#3e5746;cursor:pointer;font-family:Manrope;display:flex;align-items:center;gap:4px">
+            <span class="ms" style="font-size:13px">play_circle</span> Run Recipe
+          </div>
+          <div style="padding:5px 12px;background:#fbfdfc;border:1px solid #e0eae7;border-radius:8px;font-size:11px;font-weight:700;color:#516357;cursor:pointer;font-family:Manrope;display:flex;align-items:center;gap:4px">
+            <span class="ms" style="font-size:13px">save</span> Save
+          </div>
+        </div>
+      </div>
+      <!-- Mindmap canvas with workflow -->
+      <div class="dot-grid" style="flex:1;position:relative;overflow:hidden">
+        <!-- Connection lines (SVG) -->
+        <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none">
+          <!-- Search → Summarise -->
+          <line x1="210" y1="200" x2="340" y2="200" stroke="#4a6453" stroke-width="2" stroke-dasharray="none" marker-end="url(#arrow)"/>
+          <!-- Summarise → Draft Email -->
+          <line x1="490" y1="200" x2="620" y2="200" stroke="#4a6453" stroke-width="2" marker-end="url(#arrow)"/>
+          <!-- Draft Email → Slack -->
+          <line x1="780" y1="200" x2="900" y2="200" stroke="#a8b5b2" stroke-width="2" stroke-dasharray="6,4"/>
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" fill="#4a6453"/>
+            </marker>
+          </defs>
+        </svg>
+
+        <!-- Nodes -->
+        <div style="position:absolute;top:160px;left:60px">
+          <div style="font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#a8b5b2;text-align:center;margin-bottom:6px;font-family:Manrope">Trigger</div>
+          <div class="wf-node" style="border-color:#e8f0ed;background:#fbfdfc;color:#a8b5b2;border-style:dashed;text-align:center;padding:12px">
+            <span class="ms" style="font-size:20px;color:#d8e5e2">add</span>
+            <div style="font-size:10px;font-weight:700;color:#d8e5e2;margin-top:4px;font-family:Manrope">Add trigger</div>
+          </div>
+        </div>
+
+        <div style="position:absolute;top:152px;left:220px">
+          <div style="font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#3b82f6;text-align:center;margin-bottom:6px;font-family:Manrope">Step 1</div>
+          <div class="wf-node active" style="border-color:#3b82f6;background:#eff6ff">
+            <div style="display:flex;align-items:center;gap:6px;justify-content:center;margin-bottom:4px">
+              <span class="ms" style="font-size:14px;color:#3b82f6">search</span>
+              <span style="font-size:11px;font-weight:700;color:#1e40af;font-family:Manrope">Web Search</span>
+            </div>
+            <div style="font-size:9px;color:#3b82f6;font-family:Manrope">"latest AI news"</div>
+          </div>
+        </div>
+
+        <div style="position:absolute;top:152px;left:370px">
+          <div style="font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#4a6453;text-align:center;margin-bottom:6px;font-family:Manrope">Step 2</div>
+          <div class="wf-node active">
+            <div style="display:flex;align-items:center;gap:6px;justify-content:center;margin-bottom:4px">
+              <span class="ms" style="font-size:14px;color:#4a6453">psychology</span>
+              <span style="font-size:11px;font-weight:700;color:#3e5746;font-family:Manrope">Summarise</span>
+            </div>
+            <div style="font-size:9px;color:#516357;font-family:Manrope">3 bullet points</div>
+          </div>
+        </div>
+
+        <div style="position:absolute;top:152px;left:530px">
+          <div style="font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#8b5cf6;text-align:center;margin-bottom:6px;font-family:Manrope">Step 3</div>
+          <div class="wf-node active" style="border-color:#8b5cf6;background:#f5f3ff">
+            <div style="display:flex;align-items:center;gap:6px;justify-content:center;margin-bottom:4px">
+              <span class="ms" style="font-size:14px;color:#8b5cf6">draft</span>
+              <span style="font-size:11px;font-weight:700;color:#6d28d9;font-family:Manrope">Draft Email</span>
+            </div>
+            <div style="font-size:9px;color:#8b5cf6;font-family:Manrope">Weekly digest style</div>
+          </div>
+        </div>
+
+        <div style="position:absolute;top:152px;left:700px">
+          <div style="font-size:9px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#a8b5b2;text-align:center;margin-bottom:6px;font-family:Manrope">Step 4</div>
+          <div class="wf-node" style="border-color:#a8b5b2;border-style:dashed;background:#fafafa">
+            <div style="display:flex;align-items:center;gap:6px;justify-content:center;margin-bottom:4px">
+              <span class="ms" style="font-size:14px;color:#c4b5fd">chat</span>
+              <span style="font-size:11px;font-weight:700;color:#a8b5b2;font-family:Manrope">Send to Slack</span>
+            </div>
+            <div style="font-size:9px;color:#a8b5b2;font-family:Manrope">Needs API key</div>
+          </div>
+        </div>
+
+        <div style="position:absolute;top:152px;left:860px">
+          <div class="wf-node" style="border-color:#e8f0ed;background:#fbfdfc;border-style:dashed;padding:14px">
+            <span class="ms" style="font-size:18px;color:#d8e5e2">add</span>
+            <div style="font-size:9px;font-weight:700;color:#d8e5e2;margin-top:4px;font-family:Manrope">Add step</div>
+          </div>
+        </div>
+
+        <!-- Recipe name -->
+        <div style="position:absolute;top:300px;left:220px;background:#fbfdfc;border:1px solid #e0eae7;border-radius:12px;padding:10px 16px;max-width:380px">
+          <div style="font-size:10px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:#a8b5b2;font-family:Manrope;margin-bottom:4px">Recipe</div>
+          <div style="font-size:13px;font-weight:700;color:#293533;font-family:Manrope">Weekly AI News Digest</div>
+          <div style="font-size:11px;color:#717d7b;margin-top:2px">Runs every Monday · 3 steps active</div>
+        </div>
+
+        <!-- Toolbar -->
+        <div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:6px 10px;background:rgba(251,253,252,0.9);backdrop-filter:blur(12px);border-radius:40px;border:1px solid #e0eae7;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+          <div style="padding:6px;border-radius:50%;cursor:pointer;color:#516357" title="Add Skill"><span class="ms" style="font-size:16px">extension</span></div>
+          <div style="padding:6px;border-radius:50%;cursor:pointer;color:#516357" title="Add Source"><span class="ms" style="font-size:16px">link</span></div>
+          <div style="padding:6px;border-radius:50%;cursor:pointer;color:#516357" title="Add Tool"><span class="ms" style="font-size:16px">build</span></div>
+          <div style="width:1px;height:18px;background:#e0eae7;margin:0 4px"></div>
+          <div style="padding:6px;border-radius:50%;cursor:pointer;color:#516357"><span class="ms" style="font-size:16px">zoom_in</span></div>
+          <div style="padding:6px;border-radius:50%;cursor:pointer;color:#516357"><span class="ms" style="font-size:16px">zoom_out</span></div>
+          <div style="padding:6px;border-radius:50%;cursor:pointer;color:#516357"><span class="ms" style="font-size:16px">center_focus_strong</span></div>
+          <div style="width:1px;height:18px;background:#e0eae7;margin:0 4px"></div>
+          <div style="padding:6px;border-radius:50%;cursor:pointer;color:#516357"><span class="ms" style="font-size:16px">monitor_heart</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑥ MULTI-MODEL ARENA ───────────────────────────────────────────────────── -->
+<div class="screen" id="screen-arena" style="padding:80px 32px 40px">
+  <div class="why-box" style="max-width:1100px;margin:0 auto 20px">
+    <strong>Why this matters:</strong> "Which model is best for this?" is a question everyone has but nobody answers well.
+    The Arena lets you send one prompt to 2-3 models simultaneously and see results side-by-side.
+    <br><br>
+    <strong>What's practical:</strong> This is genuinely useful for writing (find the best draft), coding (compare approaches), and analysis (find blind spots).
+    No desktop app does this natively. It also helps users discover which models suit their workflows, driving engagement.
+  </div>
+  <div class="app-frame">
+    <div class="frame-bar">
+      <div class="frame-dot" style="background:#ff5f57"></div>
+      <div class="frame-dot" style="background:#febc2e"></div>
+      <div class="frame-dot" style="background:#28c840"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;height:540px;background:#f7faf8">
+      <div style="padding:10px 20px;border-bottom:1px solid #e8f0ed;display:flex;align-items:center;justify-content:space-between;background:#eff5f2">
+        <div style="font-family:Manrope;font-weight:800;font-size:12px;color:#293533;display:flex;align-items:center;gap:6px">
+          <span class="ms" style="font-size:16px;color:#4a6453">compare</span> Arena Mode
+          <span style="padding:2px 8px;background:#cdead3;border-radius:12px;font-size:10px;color:#3e5746">3 models</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <div style="padding:4px 10px;background:#fbfdfc;border:1px solid #e0eae7;border-radius:8px;font-size:10px;font-weight:700;color:#516357;cursor:pointer;font-family:Manrope">+ Add model</div>
+          <div style="padding:4px 10px;background:#e8f0ed;border-radius:8px;font-size:10px;font-weight:700;color:#516357;cursor:pointer;font-family:Manrope">Exit arena</div>
+        </div>
+      </div>
+
+      <!-- Three-column arena -->
+      <div style="flex:1;display:flex;overflow:hidden">
+        <!-- Col 1 -->
+        <div class="arena-col">
+          <div class="arena-header">
+            <span class="ms" style="font-size:14px;color:#3b82f6">smart_toy</span>
+            <span style="font-size:11px;font-weight:700;color:#293533;font-family:Manrope">Gemini 2.5 Pro</span>
+            <span style="font-size:9px;color:#717d7b;margin-left:auto">1.2s</span>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:14px;font-size:12px;line-height:1.7;color:#293533">
+            <strong style="color:#1e40af">Strategic recommendation:</strong> Prioritise the enterprise segment. Your current CAC-to-LTV ratio of 1:8 in SMB suggests you're leaving margin on the table. Enterprise deals at 1:24 ratio justify a higher CAC and longer sales cycle…
+            <br><br>
+            Key levers: (1) dedicated CSM at $50k+ ACV, (2) SOC 2 Type II certification to unblock procurement, (3) custom SLA tiers.
+          </div>
+          <div style="padding:8px 14px;border-top:1px solid #e8f0ed;display:flex;gap:6px">
+            <button style="flex:1;padding:5px;background:#e8f0ed;border:none;border-radius:7px;font-size:10px;font-weight:700;color:#516357;cursor:pointer;font-family:Manrope">Use this</button>
+            <button style="flex:1;padding:5px;background:#fbfdfc;border:1px solid #e0eae7;border-radius:7px;font-size:10px;font-weight:700;color:#516357;cursor:pointer;font-family:Manrope">Continue here</button>
+          </div>
+        </div>
+
+        <!-- Col 2 -->
+        <div class="arena-col">
+          <div class="arena-header">
+            <span class="ms" style="font-size:14px;color:#6366f1">psychology_alt</span>
+            <span style="font-size:11px;font-weight:700;color:#293533;font-family:Manrope">GPT-4o</span>
+            <span style="font-size:9px;color:#717d7b;margin-left:auto">0.9s</span>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:14px;font-size:12px;line-height:1.7;color:#293533">
+            I'd recommend a dual-track approach: <strong style="color:#4338ca">don't abandon SMB</strong> — instead, build a self-serve motion for SMB that runs with minimal CS overhead, freeing your team for enterprise.
+            <br><br>
+            The risk in going enterprise-first is 9-18 month sales cycles creating a revenue gap. A PLG flywheel in SMB can bridge that gap while you close your first 10 enterprise logos.
+          </div>
+          <div style="padding:8px 14px;border-top:1px solid #e8f0ed;display:flex;gap:6px">
+            <button style="flex:1;padding:5px;background:#e8f0ed;border:none;border-radius:7px;font-size:10px;font-weight:700;color:#516357;cursor:pointer;font-family:Manrope">Use this</button>
+            <button style="flex:1;padding:5px;background:#fbfdfc;border:1px solid #e0eae7;border-radius:7px;font-size:10px;font-weight:700;color:#516357;cursor:pointer;font-family:Manrope">Continue here</button>
+          </div>
+        </div>
+
+        <!-- Col 3 -->
+        <div class="arena-col" style="border-right:none">
+          <div class="arena-header">
+            <span class="ms" style="font-size:14px;color:#d97706">neurology</span>
+            <span style="font-size:11px;font-weight:700;color:#293533;font-family:Manrope">Gemini Flash</span>
+            <span style="font-size:9px;color:#717d7b;margin-left:auto">0.4s</span>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:14px;font-size:12px;line-height:1.7;color:#293533">
+            <strong>Three options:</strong>
+            <br>1. <strong>Enterprise focus</strong> — higher ACV, longer cycle
+            <br>2. <strong>SMB optimization</strong> — improve unit economics
+            <br>3. <strong>Hybrid</strong> — self-serve SMB + enterprise sales team
+            <br><br>
+            Based on your metrics, Option 3 with a 70/30 resource split (enterprise/SMB) maximises 18-month ARR.
+          </div>
+          <div style="padding:8px 14px;border-top:1px solid #e8f0ed;display:flex;gap:6px">
+            <button style="flex:1;padding:5px;background:#e8f0ed;border:none;border-radius:7px;font-size:10px;font-weight:700;color:#516357;cursor:pointer;font-family:Manrope">Use this</button>
+            <button style="flex:1;padding:5px;background:#fbfdfc;border:1px solid #e0eae7;border-radius:7px;font-size:10px;font-weight:700;color:#516357;cursor:pointer;font-family:Manrope">Continue here</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shared input -->
+      <div style="padding:10px 16px;border-top:1px solid #d8e5e2;background:#e8f0ed">
+        <div style="background:#fbfdfc;border:1px solid #e0eae7;border-radius:10px;display:flex;align-items:center;gap:6px;padding:7px 10px;max-width:600px;margin:0 auto">
+          <span style="font-size:10px;font-weight:700;color:#a8b5b2;font-family:Manrope;white-space:nowrap">Ask all 3 →</span>
+          <input style="flex:1;border:none;outline:none;background:transparent;font-size:12px;color:#293533;font-family:Inter" placeholder="Ask all models the same question…"/>
+          <div style="width:28px;height:28px;background:#4a6453;border-radius:7px;display:flex;align-items:center;justify-content:center">
+            <span class="ms ms-fill" style="font-size:14px;color:#e2ffe8">send</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑦ FILE ATTACHMENT ────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-attach" style="padding:80px 32px 40px">
+  <div class="why-box" style="max-width:700px;margin:0 auto 20px">
+    <strong>Why this matters:</strong> The Attach button is already in the UI but does nothing. Gemini 2.5 supports vision and document understanding natively.
+    Adding this isn't a feature — it's enabling what the model already does. Users who want to analyse a PDF, review a screenshot, or reference a spreadsheet
+    currently have to paste content manually.
+    <br><br>
+    <strong>What's practical:</strong> Drag and drop + paste (Cmd+V). Images get encoded as base64 and included in the API message. PDFs are extracted to text. No third-party service needed.
+  </div>
+  <div class="app-frame" style="max-width:700px">
+    <div class="frame-bar">
+      <div class="frame-dot" style="background:#ff5f57"></div>
+      <div class="frame-dot" style="background:#febc2e"></div>
+      <div class="frame-dot" style="background:#28c840"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;height:480px;background:#f7faf8;position:relative">
+      <div style="padding:10px 20px;border-bottom:1px solid #e8f0ed;display:flex;align-items:center;justify-content:center;gap:32px;background:#eff5f2">
+        <a style="font-family:Manrope;font-weight:700;font-size:14px;color:#4a6453;border-bottom:2px solid #4a6453;padding-bottom:3px;text-decoration:none">Chat</a>
+        <a style="font-family:Manrope;font-weight:700;font-size:14px;color:#a8b5b2;text-decoration:none">Mindmap</a>
+      </div>
+
+      <!-- Drop zone overlay -->
+      <div style="position:absolute;inset:44px 0 0 0;border:2.5px dashed #4a6453;background:rgba(74,100,83,.04);border-radius:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;z-index:20">
+        <span class="ms" style="font-size:40px;color:#4a6453;opacity:.4">upload_file</span>
+        <div style="font-family:Manrope;font-weight:700;font-size:14px;color:#4a6453;opacity:.6">Drop files here</div>
+        <div style="font-size:11px;color:#717d7b">Images, PDFs, text files</div>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;flex-direction:column;align-items:flex-end;max-width:420px;margin-left:auto;gap:4px">
+          <span style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#a8b5b2;font-family:Manrope">You</span>
+          <!-- Attached file chips -->
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:4px">
+            <div style="display:flex;align-items:center;gap:5px;padding:5px 10px;background:#e8f0ed;border-radius:8px;border:1px solid #d8e5e2">
+              <span class="ms" style="font-size:13px;color:#4a6453">picture_as_pdf</span>
+              <span style="font-size:11px;font-weight:600;color:#293533">Q1_report.pdf</span>
+              <span style="font-size:10px;color:#a8b5b2">2.1 MB</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:5px;padding:5px 10px;background:#e8f0ed;border-radius:8px;border:1px solid #d8e5e2">
+              <span class="ms" style="font-size:13px;color:#3b82f6">image</span>
+              <span style="font-size:11px;font-weight:600;color:#293533">dashboard.png</span>
+            </div>
+          </div>
+          <div style="background:#4a6453;color:#e2ffe8;border-radius:12px;border-top-right-radius:3px;padding:9px 13px;font-size:12px">
+            Summarise the key metrics from this report and compare to the dashboard screenshot
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;max-width:460px">
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:18px;height:18px;border-radius:50%;background:#e8f0ed;display:flex;align-items:center;justify-content:center">
+              <span class="ms" style="font-size:11px;color:#4a6453">psychology</span>
+            </div>
+            <span style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#4a6453;font-family:Manrope">Taiga</span>
+          </div>
+          <div style="background:#fbfdfc;border:1px solid #e0eae7;border-radius:12px;border-top-left-radius:3px;padding:10px 14px;font-size:12px;line-height:1.6;color:#293533">
+            From the PDF: Revenue grew 23% YoY to $4.2M ARR. MRR churn at 1.8%, down from 2.4% in Q4.
+            <br><br>Comparing to your dashboard screenshot: the chart shows MRR stabilising around $350k — consistent with the report. However, the dashboard's CAC figure ($340) is 12% higher than the $302 stated in the PDF, which may indicate a lag in reporting.
+          </div>
+        </div>
+      </div>
+      <div style="padding:10px 16px;border-top:1px solid #e8f0ed;background:#f7faf8">
+        <div style="background:#fbfdfc;border:1px solid #e0eae7;border-radius:10px;overflow:hidden">
+          <!-- Attachment preview strip -->
+          <div style="padding:6px 10px;border-bottom:1px solid #f0f4f2;display:flex;gap:6px;align-items:center">
+            <div style="display:flex;align-items:center;gap:4px;padding:3px 8px;background:#e8f0ed;border-radius:6px">
+              <span class="ms" style="font-size:11px;color:#4a6453">picture_as_pdf</span>
+              <span style="font-size:10px;font-weight:600;color:#293533">Q1_report.pdf</span>
+              <span class="ms" style="font-size:10px;color:#a8b5b2;cursor:pointer">close</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;padding:3px 8px;background:#e8f0ed;border-radius:6px">
+              <span class="ms" style="font-size:11px;color:#3b82f6">image</span>
+              <span style="font-size:10px;font-weight:600;color:#293533">dashboard.png</span>
+              <span class="ms" style="font-size:10px;color:#a8b5b2;cursor:pointer">close</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:7px 10px">
+            <button style="padding:0;background:none;border:none;cursor:pointer;display:flex;align-items:center;color:#a8b5b2">
+              <span class="ms" style="font-size:18px">attach_file</span>
+            </button>
+            <input style="flex:1;border:none;outline:none;background:transparent;font-size:12px;color:#293533;font-family:Inter" placeholder="Ask about these files…"/>
+            <div style="width:28px;height:28px;background:#4a6453;border-radius:7px;display:flex;align-items:center;justify-content:center">
+              <span class="ms ms-fill" style="font-size:14px;color:#e2ffe8">send</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
