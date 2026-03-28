@@ -104,6 +104,44 @@
             backdrop-filter: blur(20px);
         }
 
+        /* ── DM Sans as global default ── */
+        body, input, textarea, select, button {
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        /* ── Uiverse CTA underline button — adapted (WhiteNervosa) ── */
+        .cta-underline {
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 700;
+            cursor: pointer;
+            position: relative;
+            border: none;
+            background: none;
+            transition-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition-duration: 400ms;
+            transition-property: color, opacity;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #4a6453;
+            font-size: 11px;
+            padding: 0;
+        }
+        .cta-underline:hover { color: #293533; }
+        .cta-underline::after {
+            content: "";
+            pointer-events: none;
+            bottom: -2px;
+            left: 50%;
+            position: absolute;
+            width: 0%;
+            height: 1.5px;
+            background-color: #4a6453;
+            transition-timing-function: cubic-bezier(0.25, 0.8, 0.25, 1);
+            transition-duration: 400ms;
+            transition-property: width, left;
+        }
+        .cta-underline:hover::after { width: 100%; left: 0%; }
+
         .primary-gradient {
             background: linear-gradient(145deg, #4a6453, #3f5847);
         }

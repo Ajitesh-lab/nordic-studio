@@ -528,16 +528,46 @@ function getGreeting() {
 }
 
 function showToast(msg, dur = 3000) {
+  // Detect tone from message content
+  const isError   = /error|fail|invalid|not found|could not/i.test(msg);
+  const isWarning = /warning|slow|check|retry|still/i.test(msg);
+
+  // Color tokens adapted from uiverse alert to app palette
+  const styles = isError
+    ? { bg:'#fff1f2', border:'#f43f5e', icon:'error',   iconColor:'#f43f5e', textColor:'#9f1239' }
+    : isWarning
+    ? { bg:'#fffbeb', border:'#f59e0b', icon:'warning',  iconColor:'#f59e0b', textColor:'#92400e' }
+    : { bg:'#f0fdf4', border:'#4a6453', icon:'check_circle', iconColor:'#4a6453', textColor:'#3e5746' };
+
   let t = document.getElementById('ns-toast');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'ns-toast';
-    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;z-index:9999;pointer-events:none;transition:opacity 0.3s';
-    document.body.appendChild(t);
-  }
-  t.textContent = msg; t.style.opacity = '1';
+  if (!t) { t = document.createElement('div'); t.id = 'ns-toast'; document.body.appendChild(t); }
+
+  t.style.cssText = `
+    position:fixed;bottom:88px;left:50%;transform:translateX(-50%);
+    z-index:9999;pointer-events:none;
+    transition:opacity 0.25s ease, transform 0.25s ease;
+    font-family:'DM Sans',sans-serif;
+  `;
+  t.innerHTML = `
+    <div style="
+      display:flex;align-items:flex-start;gap:10px;
+      background:${styles.bg};
+      border-left:4px solid ${styles.border};
+      border-radius:6px;
+      padding:10px 16px 10px 12px;
+      min-width:220px;max-width:320px;
+      box-shadow:0 4px 24px rgba(0,0,0,0.10);
+    ">
+      <span class="material-symbols-outlined" style="
+        font-size:18px;color:${styles.iconColor};flex-shrink:0;margin-top:1px;
+        font-variation-settings:'FILL' 1
+      ">${styles.icon}</span>
+      <span style="color:${styles.textColor};font-size:13px;font-weight:500;line-height:1.4">${msg}</span>
+    </div>`;
+  t.style.opacity = '1';
+  t.style.transform = 'translateX(-50%) translateY(0)';
   clearTimeout(t._tid);
-  t._tid = setTimeout(() => { t.style.opacity = '0'; }, dur);
+  t._tid = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(6px)'; }, dur);
 }
 
 function ensureStyles() {
@@ -565,6 +595,43 @@ function ensureStyles() {
     #skill-panel{animation:panelIn .2s ease-out}
     @keyframes subNodeIn{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
     .sub-node{animation:subNodeIn .25s ease-out}
+
+    /* ── Uiverse CTA underline button (WhiteNervosa) — adapted to app palette ── */
+    .cta-underline {
+      font-family:'DM Sans',sans-serif;
+      font-weight:700;
+      cursor:pointer;
+      position:relative;
+      border:none;
+      background:none;
+      transition-timing-function:cubic-bezier(0.25,0.8,0.25,1);
+      transition-duration:400ms;
+      transition-property:color,opacity;
+      text-transform:uppercase;
+      letter-spacing:0.06em;
+      color:#4a6453;
+      font-size:11px;
+      padding:0;
+    }
+    .cta-underline:hover { color:#293533; opacity:1; }
+    .cta-underline::after {
+      content:"";
+      pointer-events:none;
+      bottom:-2px;
+      left:50%;
+      position:absolute;
+      width:0%;
+      height:1.5px;
+      background-color:#4a6453;
+      transition-timing-function:cubic-bezier(0.25,0.8,0.25,1);
+      transition-duration:400ms;
+      transition-property:width,left;
+    }
+    .cta-underline:hover::after { width:100%; left:0%; }
+
+    /* ── Toast slide-up animation ── */
+    @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+    #ns-toast { animation:toastIn 0.25s ease-out; }
   `;
   document.head.appendChild(s);
 }
@@ -2268,9 +2335,9 @@ function renderChat() {
                 <input id="file-input-hero" type="file" class="hidden" multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.py,.html,.css"/>
               </div>
               <div class="flex gap-5">
-                <button class="text-xs text-on-surface-variant hover:text-primary transition-colors" onclick="window._sendPrompt('Synthesize quarterly reports')">Synthesize quarterly reports</button>
-                <button class="text-xs text-on-surface-variant hover:text-primary transition-colors" onclick="window._sendPrompt('Draft the project manifesto')">Draft the project manifesto</button>
-                <button class="text-xs text-on-surface-variant hover:text-primary transition-colors hidden lg:block" onclick="window._sendPrompt('Review architectural decisions')">Review architectural decisions</button>
+                <button class="cta-underline" onclick="window._sendPrompt('Synthesize quarterly reports')">Synthesize quarterly reports</button>
+                <button class="cta-underline" onclick="window._sendPrompt('Draft the project manifesto')">Draft the project manifesto</button>
+                <button class="cta-underline hidden lg:block" onclick="window._sendPrompt('Review architectural decisions')">Review architectural decisions</button>
               </div>
             </div>
           </div>

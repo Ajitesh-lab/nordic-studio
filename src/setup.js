@@ -251,8 +251,8 @@ class SetupWizard {
   }
 
   _backBtn() {
-    return `<button id="wz-back" class="flex items-center gap-1 text-xs mb-5 transition-colors hover:opacity-70" style="color:#717d7b">
-      <span class="material-symbols-outlined text-sm">arrow_back</span> Back
+    return `<button id="wz-back" style="display:flex;align-items:center;gap:4px;margin-bottom:20px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;color:#717d7b;background:none;border:none;cursor:pointer;position:relative;letter-spacing:0.05em;text-transform:uppercase;transition:color 0.2s;padding:0">
+      <span class="material-symbols-outlined" style="font-size:14px">arrow_back</span> Back
     </button>`;
   }
 
