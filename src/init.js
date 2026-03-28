@@ -35,27 +35,13 @@ async function start() {
   const hasSetupFlag = localStorage.getItem(SETUP_KEY);
 
   if (hasSetupFlag) {
-    // Check if gateway is actually running — if openclaw was wiped, re-run setup
-    const alive = await gatewayAlive();
-    if (!alive) {
-      // Give Swift side a moment to start gateway, then check again
-      await new Promise(r => setTimeout(r, 4000));
-      const aliveRetry = await gatewayAlive();
-      if (!aliveRetry) {
-        // Gateway is genuinely gone — clear setup flag and re-run wizard
-        localStorage.removeItem(SETUP_KEY);
-        const { runSetup } = await import('./setup.js');
-        await runSetup();
-        await import('./main.js');
-        revealApp(200);
-        return;
-      }
-    }
-    // Returning user — gateway is running, load main app
+    // Returning user — load main app directly. Offline state is handled in-app.
+    // Do NOT clear the setup flag based on gateway health; gateway may still be
+    // starting up. User can click "Restart Setup" if they need to re-run.
     await import('./main.js');
     revealApp(2000);
   } else {
-    // First launch — wizard handles the splash itself, then loads main app
+    // First launch — wizard handles the splash itself, then loads main app.
     const { runSetup } = await import('./setup.js');
     await runSetup();
     await import('./main.js');

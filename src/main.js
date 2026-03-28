@@ -1584,17 +1584,17 @@ function mindmapNodesHTML() {
     if (node.type === 'category') {
       return `<div data-node-id="${node.id}" class="absolute cursor-pointer"
         style="left:${node.x}px;top:${node.y}px;z-index:10;user-select:none">
-        <div class="glass-panel p-5 rounded-2xl shadow-xl border border-outline-variant/10 w-48 hover:-translate-y-1 hover:shadow-2xl transition-all duration-300">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm" style="background:${m.bg}; color:${m.border};">
-              <span class="material-symbols-outlined text-lg">${m.icon}</span>
+        <div class="glass-panel px-3 py-2.5 rounded-xl shadow-sm border border-outline-variant/10 w-40 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200" style="border-left:2.5px solid ${m.border}20">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-lg flex items-center justify-center shrink-0" style="background:${m.bg}; color:${m.border};">
+              <span class="material-symbols-outlined" style="font-size:13px">${m.icon}</span>
             </div>
-            <span class="font-headline font-bold text-sm text-on-surface truncate pr-2">${escapeHtml(node.label)}</span>
-            <div style="width:18px;height:18px;border-radius:9px;background:${node.expanded ? m.border : 'rgba(0,0,0,0.05)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:auto">
-              <span class="material-symbols-outlined" style="color:${node.expanded ? 'white' : '#64748b'};font-size:12px;transition:transform 0.2s;transform:${node.expanded ? 'rotate(180deg)' : 'rotate(0)'}">expand_more</span>
+            <span class="font-bold text-xs text-on-surface truncate flex-1">${escapeHtml(node.label)}</span>
+            <div style="width:14px;height:14px;border-radius:7px;background:${node.expanded ? m.border : 'rgba(0,0,0,0.06)'};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              <span class="material-symbols-outlined" style="color:${node.expanded ? 'white' : '#94a3b8'};font-size:9px;transition:transform 0.2s;transform:${node.expanded ? 'rotate(180deg)' : 'none'}">expand_more</span>
             </div>
           </div>
-          <p class="text-[12px] text-on-surface-variant leading-relaxed font-medium">${node.count} skill${node.count !== 1 ? 's' : ''}</p>
+          <div class="text-[10px] text-on-surface-variant mt-1.5 font-medium">${node.count} skill${node.count !== 1 ? 's' : ''}</div>
         </div>
       </div>`;
     }
@@ -1620,18 +1620,18 @@ function mindmapNodesHTML() {
     const presenceActive = node.type === 'presence' && (Date.now() - (node.presenceEntry?.ts || 0)) < 30000;
     return `<div data-node-id="${node.id}" class="absolute cursor-grab group"
       style="left:${node.x}px;top:${node.y}px;z-index:10;user-select:none">
-      <div class="glass-panel p-5 rounded-2xl shadow-xl border border-outline-variant/10 w-48 transition-all duration-300 group-hover:-translate-y-0.5">
-        <div class="flex items-center gap-3 mb-3">
-          <div class="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm relative" style="background:${m.bg}; color:${m.border};">
-            <span class="material-symbols-outlined text-lg">${node.icon}</span>
-            <div class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${presenceActive ? 'bg-emerald-500' : 'bg-slate-400'}"></div>
+      <div class="glass-panel px-3 py-2.5 rounded-xl shadow-sm border border-outline-variant/10 w-40 transition-all duration-200 group-hover:-translate-y-0.5" style="border-left:2.5px solid ${m.border}20">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded-lg flex items-center justify-center relative shrink-0" style="background:${m.bg}; color:${m.border};">
+            <span class="material-symbols-outlined" style="font-size:13px">${node.icon}</span>
+            <div class="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${presenceActive ? 'bg-emerald-500' : 'bg-slate-300'}"></div>
           </div>
           <div class="flex-1 min-w-0">
-            <span class="font-headline font-bold text-sm block truncate text-on-surface">${escapeHtml(node.label)}</span>
-            <span class="text-[10px] font-bold tracking-widest uppercase ${presenceActive ? 'text-emerald-600' : 'text-slate-500'}">${presenceActive ? 'Active' : 'Offline'}</span>
+            <div class="font-bold text-xs text-on-surface truncate">${escapeHtml(node.label)}</div>
+            <div class="text-[9px] font-semibold tracking-wider uppercase ${presenceActive ? 'text-emerald-500' : 'text-slate-400'}">${presenceActive ? 'Active' : 'Offline'}</div>
           </div>
         </div>
-        <p class="text-[11px] text-on-surface-variant leading-relaxed font-medium truncate">${escapeHtml(node.sub)}</p>
+        <p class="text-[10px] text-on-surface-variant mt-1 truncate">${escapeHtml(node.sub)}</p>
       </div>
     </div>`;
   }).join('');
@@ -1640,95 +1640,58 @@ function mindmapNodesHTML() {
 // ── View renderers ────────────────────────────────────────────────────────────
 function renderChat() {
   const isEmpty = state.messages.length === 0;
+  const hr = new Date().getHours();
+  const greeting = hr < 12 ? 'Good morning.' : hr < 17 ? 'Good afternoon.' : 'Good evening.';
 
-  return `
-    <!-- Workspace Body -->
-    <div class="flex-1 flex flex-col items-center ${isEmpty ? 'justify-center' : 'justify-start pt-8 overflow-y-auto'} px-6 max-w-4xl mx-auto w-full pb-32 relative anim-slide-down" id="messages-scroll">
-      
-      <!-- Background Layering Effect -->
-      <div class="absolute inset-0 -z-10 flex items-center justify-center opacity-40 pointer-events-none">
-        <div class="w-[600px] h-[600px] bg-primary/5 rounded-full blur-[100px]"></div>
-      </div>
-
-      <div class="w-full flex flex-col ${isEmpty ? 'items-center' : ''}">
-        ${isEmpty ? `
-          <!-- Prominent Message Input Area -->
-          <div class="w-full max-w-3xl group transition-all anim-slide-up" id="welcome-input">
-            <!-- Central Welcome Text -->
-            <div class="text-center mb-12 space-y-4">
-              <h1 class="text-6xl md:text-7xl font-serif-elegant tracking-tight text-on-surface leading-tight">
-                  Good evening.
-              </h1>
-              <p class="text-on-surface-variant text-lg font-light tracking-wide max-w-lg mx-auto leading-relaxed">
-                  Your workspace is quiet and prepared. What shall we cultivate today?
-              </p>
-            </div>
-            
-            <div class="relative surface-container-lowest glass-panel rounded-2xl shadow-[0_24px_48px_-12px_rgba(41,53,51,0.08)] border border-outline-variant/10 p-1">
-              <div class="flex items-end gap-3 p-4">
-                <div class="flex-1 min-h-[56px] py-2">
-                  <textarea id="chat-input-hero" class="w-full bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant/60 resize-none py-1 text-lg font-body leading-relaxed" placeholder="Enter your thoughts here..." rows="1" autofocus></textarea>
-                </div>
-                <button id="send-btn-hero" class="flex items-center justify-center w-12 h-12 bg-primary text-on-primary rounded-xl shadow-lg transition-transform active:scale-95 group-hover:shadow-primary/20 scale-98-on-click">
-                  <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">send</span>
-                </button>
-              </div>
-              <div class="flex items-center px-4 py-2 bg-surface-container-low/30 rounded-b-2xl border-t border-outline-variant/5">
-                <div class="flex gap-4">
-                  <button class="flex items-center gap-2 text-xs font-label uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors">
-                    <span class="material-symbols-outlined text-sm">attach_file</span>
-                    <span>Attach</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Inspiration Section -->
-            <div class="mt-16 w-full text-center anim-slide-up" style="animation-delay: 0.1s;">
-              <h3 class="text-xs font-label uppercase tracking-[0.2em] text-outline-variant mb-6">Inspiration to explore</h3>
-              <div class="flex flex-wrap justify-center gap-x-8 gap-y-4">
-                <a class="text-sm font-medium text-on-surface-variant hover:text-primary transition-all flex items-center gap-1 group/btn cursor-pointer" onclick="window._sendPrompt('Synthesize quarterly reports')">
-                  <span>Synthesize quarterly reports</span>
-                  <span class="material-symbols-outlined text-xs opacity-0 -translate-x-2 group-hover/btn:opacity-100 group-hover/btn:translate-x-0 transition-all">arrow_forward</span>
-                </a>
-                <a class="text-sm font-medium text-on-surface-variant hover:text-primary transition-all flex items-center gap-1 group/btn cursor-pointer" onclick="window._sendPrompt('Draft the project manifesto')">
-                  <span>Draft the project manifesto</span>
-                  <span class="material-symbols-outlined text-xs opacity-0 -translate-x-2 group-hover/btn:opacity-100 group-hover/btn:translate-x-0 transition-all">arrow_forward</span>
-                </a>
-                <a class="text-sm font-medium text-on-surface-variant hover:text-primary transition-all flex items-center gap-1 group/btn cursor-pointer" onclick="window._sendPrompt('Review architectural decisions')">
-                  <span>Review architectural decisions</span>
-                  <span class="material-symbols-outlined text-xs opacity-0 -translate-x-2 group-hover/btn:opacity-100 group-hover/btn:translate-x-0 transition-all">arrow_forward</span>
-                </a>
-              </div>
-            </div>
+  if (isEmpty) {
+    // ── Empty state: centered welcome ──────────────────────────────────────────
+    return `
+      <div class="flex-1 flex flex-col items-center justify-center px-6 overflow-hidden" id="messages-scroll">
+        <div class="w-full max-w-2xl flex flex-col items-center gap-10">
+          <div class="text-center space-y-3">
+            <h1 class="text-5xl font-serif-elegant tracking-tight text-on-surface">${greeting}</h1>
+            <p class="text-on-surface-variant text-base font-light max-w-sm mx-auto leading-relaxed">
+              Your workspace is ready. What shall we work on?
+            </p>
           </div>
-        ` : ''}
 
-        <div class="w-full space-y-8" id="messages" style="${isEmpty ? 'display:none;' : ''}"></div>
-      </div>
-
-      ${!isEmpty ? `
-      <!-- Fixed Bottom Input Bar for Active Chat -->
-      <div class="fixed bottom-0 left-0 right-0 py-6 px-4 md:px-8 flex justify-center pointer-events-none z-20" style="padding-left: 280px;">
-        <div class="max-w-3xl w-full pointer-events-auto">
-          <div class="glass-panel p-2 rounded-2xl shadow-[0_20px_40px_-4px_rgba(41,53,51,0.06)] flex items-center gap-2 border border-outline-variant/10 focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/10 transition-all bg-surface-container-lowest/90">
-            <button class="p-3 text-on-surface-variant hover:bg-surface-container rounded-xl transition-colors flex items-center justify-center">
-              <span class="material-symbols-outlined">attach_file</span>
-            </button>
-            <input id="chat-input" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant py-3 px-2 font-body text-base" placeholder="Message Arboretum..." type="text" autocomplete="off" />
-            <button id="send-btn" class="p-3 bg-primary text-on-primary rounded-xl flex items-center justify-center shadow-sm hover:opacity-90 transition-all scale-98-on-click">
-              <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">send</span>
-            </button>
+          <div class="w-full glass-panel rounded-2xl border border-outline-variant/10 shadow-sm">
+            <div class="flex items-end gap-3 px-4 pt-4 pb-3">
+              <textarea id="chat-input-hero" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant/50 resize-none py-1 text-base font-body leading-relaxed min-h-[44px]" placeholder="Enter your thoughts here..." rows="1" autofocus></textarea>
+              <button id="send-btn-hero" class="flex items-center justify-center w-10 h-10 bg-primary text-on-primary rounded-xl shadow-sm transition-transform active:scale-95 shrink-0">
+                <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1">send</span>
+              </button>
+            </div>
+            <div class="flex items-center px-4 py-2.5 border-t border-outline-variant/8">
+              <span class="text-[10px] uppercase tracking-widest font-semibold text-outline-variant/60">Inspire me</span>
+              <div class="flex gap-5 ml-4">
+                <button class="text-xs text-on-surface-variant hover:text-primary transition-colors" onclick="window._sendPrompt('Synthesize quarterly reports')">Synthesize quarterly reports</button>
+                <button class="text-xs text-on-surface-variant hover:text-primary transition-colors" onclick="window._sendPrompt('Draft the project manifesto')">Draft the project manifesto</button>
+                <button class="text-xs text-on-surface-variant hover:text-primary transition-colors" onclick="window._sendPrompt('Review architectural decisions')">Review architectural decisions</button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-      ` : ''}
+      </div>`;
+  }
 
-      <!-- Subtle Decorative Element -->
-      <div class="absolute bottom-6 right-8 pointer-events-none hidden lg:block ${!isEmpty ? 'fixed bottom-4' : ''}">
-        <div class="flex items-center gap-3 opacity-30 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-700">
-          <span class="text-[10px] uppercase tracking-widest font-label text-on-surface-variant">Secure Workspace Enclave</span>
-          <div class="w-1.5 h-1.5 rounded-full bg-[#506A58]"></div>
+  // ── Active chat: flex column, input pinned at bottom via flex ──────────────
+  return `
+    <div class="flex-1 flex flex-col overflow-hidden" id="chat-wrapper">
+      <!-- Scrollable messages -->
+      <div class="flex-1 overflow-y-auto px-6 py-6" id="messages-scroll">
+        <div class="max-w-2xl mx-auto w-full space-y-6" id="messages"></div>
+      </div>
+
+      <!-- Input bar — stays at bottom via flexbox, NO position:fixed -->
+      <div class="flex-shrink-0 px-6 pb-5 pt-3 bg-surface border-t border-outline-variant/8">
+        <div class="max-w-2xl mx-auto">
+          <div class="glass-panel flex items-center gap-2 rounded-xl border border-outline-variant/10 shadow-sm px-3 py-2 focus-within:border-primary/30 focus-within:shadow-md transition-all bg-surface-container-lowest/90">
+            <input id="chat-input" class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant/50 py-2 px-1 font-body text-sm" placeholder="Message Taiga..." type="text" autocomplete="off" />
+            <button id="send-btn" class="p-2 bg-primary text-on-primary rounded-lg flex items-center justify-center shadow-sm hover:opacity-90 transition-all active:scale-95 shrink-0">
+              <span class="material-symbols-outlined text-lg" style="font-variation-settings:'FILL' 1">send</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>`;
@@ -1739,13 +1702,13 @@ function renderMindmap() {
   const presCount = state.mindmapNodes.filter(n => n.type === 'presence').length;
   return `
     <div class="flex-1 relative overflow-hidden bg-surface-container-low mindmap-grid min-h-0 anim-slide-up" id="mindmap-canvas">
-      <div class="absolute top-24 left-8 z-10 pointer-events-none">
-        <div class="text-xl font-bold tracking-tight text-on-surface">Skills & Agents</div>
-        <div class="flex items-center gap-3 mt-1">
-          <span class="w-2 h-2 rounded-full ${state.connected ? 'bg-emerald-500' : 'bg-red-400'}"></span>
-          <span class="text-xs font-medium text-secondary">${state.connected ? 'Live' : 'Offline'}</span>
-          ${catCount ? `<span class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold">${catCount} categories</span>` : ''}
-          ${presCount ? `<span class="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold">${presCount} connected</span>` : ''}
+
+      <!-- Subtle top-left status pill -->
+      <div class="absolute top-20 left-6 z-10 pointer-events-none">
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full glass-panel border border-outline-variant/10 shadow-sm">
+          <span class="w-1.5 h-1.5 rounded-full ${state.connected ? 'bg-emerald-400' : 'bg-red-400'}"></span>
+          <span class="text-[11px] font-semibold text-on-surface-variant tracking-wide">${catCount ? catCount + ' skills' : 'Skills & Agents'}</span>
+          ${presCount ? `<span class="w-px h-3 bg-outline-variant/40"></span><span class="text-[10px] text-orange-500 font-semibold">${presCount} connected</span>` : ''}
         </div>
       </div>
 
@@ -1755,28 +1718,9 @@ function renderMindmap() {
         <div data-nodes-layer style="position:absolute;left:0;top:0;right:0;bottom:0;z-index:10">${mindmapNodesHTML()}</div>
       </div>
 
-      <!-- Bottom-left buttons -->
-      <div class="absolute bottom-6 left-6 z-20 flex gap-2">
-        <button onclick="window._showSkillModal()" class="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-sm hover:border-primary/40 hover:shadow-md transition-all text-sm text-secondary font-medium">
-          <span class="material-symbols-outlined text-sm">extension</span> Add Skill
-        </button>
-        <button onclick="window._showAddSourceModal()" class="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-sm hover:border-sky-400/40 hover:shadow-md transition-all text-sm text-secondary font-medium">
-          <span class="material-symbols-outlined text-sm">link</span> Add Source
-        </button>
-        <button onclick="window._showAddToolModal()" class="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest border border-outline-variant/30 rounded-xl shadow-sm hover:border-purple-400/40 hover:shadow-md transition-all text-sm text-secondary font-medium">
-          <span class="material-symbols-outlined text-sm">build</span> Add Tool
-        </button>
-      </div>
-
-      <!-- Monitor -->
-      <div class="absolute bottom-6 right-6 z-20">
-        <button onclick="window._toggleMonitor()" class="flex items-center gap-2 px-3 py-2 ${state.monitorOpen ? 'bg-orange-500 text-white' : 'bg-surface-container-lowest text-secondary border border-outline-variant/30'} rounded-xl shadow-sm hover:shadow-md transition-all text-xs font-semibold">
-          <span class="material-symbols-outlined text-sm">monitor_heart</span> Claude Code
-        </button>
-      </div>
-
+      <!-- Monitor panel -->
       ${state.monitorOpen ? `
-        <div class="absolute bottom-20 right-6 w-80 bg-surface-container-lowest border border-outline-variant/20 rounded-2xl shadow-xl overflow-hidden" style="z-index:35;max-height:400px;display:flex;flex-direction:column">
+        <div class="absolute bottom-16 right-6 w-80 bg-surface-container-lowest border border-outline-variant/20 rounded-2xl shadow-xl overflow-hidden" style="z-index:35;max-height:400px;display:flex;flex-direction:column">
           <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
             <div class="flex items-center gap-2">
               <span class="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
@@ -1787,17 +1731,33 @@ function renderMindmap() {
           <div id="monitor-panel-body" class="overflow-y-auto p-4" style="max-height:340px">${renderMonitorContent()}</div>
         </div>` : ''}
 
-      <!-- Toolbar -->
-      <div class="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 p-1.5 glass-panel rounded-full shadow z-30">
-        <button onclick="(() => {const s=Math.min(4,window.__nordicState.mapScale*1.2);const c=document.getElementById('mindmap-canvas').getBoundingClientRect();const mx=c.width/2,my=c.height/2;window.__nordicState.mapPanX=mx-(mx-window.__nordicState.mapPanX)*(s/window.__nordicState.mapScale);window.__nordicState.mapPanY=my-(my-window.__nordicState.mapPanY)*(s/window.__nordicState.mapScale);window.__nordicState.mapScale=s;document.getElementById('mindmap-world').style.transform='translate('+window.__nordicState.mapPanX+'px,'+window.__nordicState.mapPanY+'px) scale('+s+')'})()" class="p-2 hover:bg-surface-container-high rounded-full">
-          <span class="material-symbols-outlined text-secondary">zoom_in</span>
+      <!-- Unified bottom toolbar pill -->
+      <div class="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-1.5 glass-panel rounded-full shadow-md border border-outline-variant/10 z-30">
+        <!-- Add actions -->
+        <button title="Add Skill" onclick="window._showSkillModal()" class="p-2 hover:bg-primary/8 rounded-full transition-colors group">
+          <span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:text-primary transition-colors">extension</span>
         </button>
-        <button onclick="(() => {const s=Math.max(0.1,window.__nordicState.mapScale*0.8);const c=document.getElementById('mindmap-canvas').getBoundingClientRect();const mx=c.width/2,my=c.height/2;window.__nordicState.mapPanX=mx-(mx-window.__nordicState.mapPanX)*(s/window.__nordicState.mapScale);window.__nordicState.mapPanY=my-(my-window.__nordicState.mapPanY)*(s/window.__nordicState.mapScale);window.__nordicState.mapScale=s;document.getElementById('mindmap-world').style.transform='translate('+window.__nordicState.mapPanX+'px,'+window.__nordicState.mapPanY+'px) scale('+s+')'})()" class="p-2 hover:bg-surface-container-high rounded-full">
-          <span class="material-symbols-outlined text-secondary">zoom_out</span>
+        <button title="Add Source" onclick="window._showAddSourceModal()" class="p-2 hover:bg-sky-500/8 rounded-full transition-colors group">
+          <span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:text-sky-500 transition-colors">link</span>
         </button>
-        <div class="w-px h-6 bg-outline-variant/30 mx-1"></div>
-        <button onclick="window._resetMindmap()" class="p-2 hover:bg-surface-container-high rounded-full">
-          <span class="material-symbols-outlined text-secondary">center_focus_strong</span>
+        <button title="Add Tool" onclick="window._showAddToolModal()" class="p-2 hover:bg-purple-500/8 rounded-full transition-colors group">
+          <span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:text-purple-500 transition-colors">build</span>
+        </button>
+        <div class="w-px h-5 bg-outline-variant/25 mx-1"></div>
+        <!-- Zoom -->
+        <button title="Zoom in" onclick="(() => {const s=Math.min(4,window.__nordicState.mapScale*1.2);const c=document.getElementById('mindmap-canvas').getBoundingClientRect();const mx=c.width/2,my=c.height/2;window.__nordicState.mapPanX=mx-(mx-window.__nordicState.mapPanX)*(s/window.__nordicState.mapScale);window.__nordicState.mapPanY=my-(my-window.__nordicState.mapPanY)*(s/window.__nordicState.mapScale);window.__nordicState.mapScale=s;document.getElementById('mindmap-world').style.transform='translate('+window.__nordicState.mapPanX+'px,'+window.__nordicState.mapPanY+'px) scale('+s+')'})()" class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+          <span class="material-symbols-outlined text-[18px] text-on-surface-variant">zoom_in</span>
+        </button>
+        <button title="Zoom out" onclick="(() => {const s=Math.max(0.1,window.__nordicState.mapScale*0.8);const c=document.getElementById('mindmap-canvas').getBoundingClientRect();const mx=c.width/2,my=c.height/2;window.__nordicState.mapPanX=mx-(mx-window.__nordicState.mapPanX)*(s/window.__nordicState.mapScale);window.__nordicState.mapPanY=my-(my-window.__nordicState.mapPanY)*(s/window.__nordicState.mapScale);window.__nordicState.mapScale=s;document.getElementById('mindmap-world').style.transform='translate('+window.__nordicState.mapPanX+'px,'+window.__nordicState.mapPanY+'px) scale('+s+')'})()" class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+          <span class="material-symbols-outlined text-[18px] text-on-surface-variant">zoom_out</span>
+        </button>
+        <button title="Center view" onclick="window._resetMindmap()" class="p-2 hover:bg-surface-container-high rounded-full transition-colors">
+          <span class="material-symbols-outlined text-[18px] text-on-surface-variant">center_focus_strong</span>
+        </button>
+        <div class="w-px h-5 bg-outline-variant/25 mx-1"></div>
+        <!-- Monitor toggle -->
+        <button title="Claude Code Monitor" onclick="window._toggleMonitor()" class="p-2 rounded-full transition-colors ${state.monitorOpen ? 'bg-orange-500/15' : 'hover:bg-surface-container-high'}">
+          <span class="material-symbols-outlined text-[18px] ${state.monitorOpen ? 'text-orange-500' : 'text-on-surface-variant'}">monitor_heart</span>
         </button>
       </div>
     </div>`;
