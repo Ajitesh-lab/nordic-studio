@@ -4,6 +4,8 @@
 <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <!-- Security: restrict plugin embedding and base URL tampering -->
+    <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self';" />
     <title>Biome · Taiga</title>
     <!-- Material Symbols -->
     <link

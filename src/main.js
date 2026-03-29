@@ -569,7 +569,7 @@ function showToast(msg, dur = 3000) {
         font-size:18px;color:${styles.iconColor};flex-shrink:0;margin-top:1px;
         font-variation-settings:'FILL' 1
       ">${styles.icon}</span>
-      <span style="color:${styles.textColor};font-size:13px;font-weight:500;line-height:1.4">${msg}</span>
+      <span style="color:${styles.textColor};font-size:13px;font-weight:500;line-height:1.4">${escapeHtml(msg)}</span>
     </div>`;
   t.style.opacity = '1';
   t.style.transform = 'translateX(-50%) translateY(0)';
@@ -957,12 +957,24 @@ async function executeTool(name, args) {
   }
   if (name === 'calculate') {
     try {
-      const safe = args.expression
-        .replace(/\bsqrt\b/g, 'Math.sqrt').replace(/\babs\b/g, 'Math.abs')
-        .replace(/\bfloor\b/g, 'Math.floor').replace(/\bceil\b/g, 'Math.ceil')
-        .replace(/\bround\b/g, 'Math.round').replace(/\bPI\b/g, 'Math.PI')
-        .replace(/\bE\b/g, 'Math.E').replace(/\^/g, '**')
-        .replace(/[^0-9+\-*/().,\s*Math.\w]/g, '');
+      // Secure sanitization: replace known Math names with \x01-delimited placeholders,
+      // strip ALL other word chars/identifiers, then restore. This prevents prototype
+      // traversal attacks like Math.constructor.constructor('evil')().
+      const MATH_SUBS = {
+        sqrt: 'Math.sqrt', abs: 'Math.abs', floor: 'Math.floor',
+        ceil: 'Math.ceil', round: 'Math.round', pow: 'Math.pow',
+        log: 'Math.log', sin: 'Math.sin', cos: 'Math.cos', tan: 'Math.tan',
+        min: 'Math.min', max: 'Math.max', PI: 'Math.PI', E: 'Math.E',
+      };
+      let safe = args.expression.replace(/\^/g, '**');
+      // Step 1: mark known names with non-printable delimiters
+      for (const fn of Object.keys(MATH_SUBS))
+        safe = safe.replace(new RegExp(`\\b${fn}\\b`, 'g'), `\x01${fn}\x01`);
+      // Step 2: strip anything that is NOT digits, operators, parens, decimal, space, or our delimiters
+      safe = safe.replace(/[^0-9+\-*/().,\s\x01]/g, '');
+      // Step 3: restore placeholders to Math.* calls
+      for (const [fn, repl] of Object.entries(MATH_SUBS))
+        safe = safe.split(`\x01${fn}\x01`).join(repl);
       // eslint-disable-next-line no-new-func
       const result = Function('"use strict"; return (' + safe + ')')();
       return { ok: true, expression: args.expression, result };
@@ -992,6 +1004,9 @@ function runCodeSandbox(code, description = '') {
     }, 5000);
 
     function handler(e) {
+      // Only accept messages from sandboxed srcdoc iframes (origin is 'null')
+      // or same origin. Blocks spoofed postMessages from other iframes/windows.
+      if (e.origin !== 'null' && e.origin !== window.location.origin) return;
       if (e.data?.sandboxId !== id) return;
       clearTimeout(timer);
       window.removeEventListener('message', handler);
@@ -3590,7 +3605,10 @@ window._showAddSourceModal = (editId) => {
 window._saveSource = (editId) => {
   const url = document.getElementById('src-url')?.value?.trim();
   if (!url) { showToast('Please enter a URL'); return; }
-  try { new URL(url); } catch { showToast('Invalid URL'); return; }
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) { showToast('Only http:// and https:// URLs are allowed'); return; }
+  } catch { showToast('Invalid URL'); return; }
   const label = document.getElementById('src-label')?.value?.trim();
   const description = document.getElementById('src-desc')?.value?.trim();
   if (editId) {
